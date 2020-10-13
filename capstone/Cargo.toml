@@ -1,0 +1,96 @@
+[package]
+name = "capstone"
+version = "0.1.0"
+authors = ["Adolph C. <adolphc@outlook.com>"]
+edition = "2018"
+
+[features]
+
+default = [
+    "std", "arm", "aarch64", "m68k", "mips", "powerpc", "sparc", "systemz",
+    "x86", "xcore", "tms320c64x", "m680x", "evm", "mos65xx", "sys-dyn-mem"
+]
+
+# This allows the library to use the standard library.
+std = ["alloc"]
+
+# This allows the library to use collections and smart pointers found
+# in `alloc`.
+alloc = []
+
+# This enables disassembly for 32bit ARM.
+arm = []
+
+# This enables disasembly for 64bit ARM.
+aarch64 = []
+
+# This enables disassembly for M68k
+m68k = []
+
+# This enables disassembly for MIPS
+mips = []
+
+# This enables disassembly for PowerPC
+powerpc = []
+
+# This enables disassembly for SPARC.
+sparc= []
+
+# This enables disassembly for SystemZ
+systemz = []
+
+
+# This enables disassembly for x86
+x86 = []
+
+# This enables disassembly for XCore
+xcore = []
+
+# This enables disassembly for TMS320 C64X
+tms320c64x = []
+
+# This enables disassembly for m680x
+m680x = []
+
+# This enables disassembly for EVM
+evm = []
+
+# This enables disassembly for mos65xx
+mos65xx = []
+
+# If this is enabled then capstone will use malloc/calloc/realloc/free/vsnprintf
+# provided by your system for internal dynamic memory management.
+#
+# If this is not enabled then you will have to specific your own malloc/calloc/realloc/free/vsnprintf
+sys-dyn-mem = []
+
+
+# If this is set to true then capstone will be more compact and use less
+# memory but support for mnemonic and operand data, semantic information
+# such as registers read/written and group will not not be included.
+diet = []
+
+# If this is enabled non-critical instruction sets will be removed from the
+# disassembly for x86. The let of instruction sets removed includes:
+#
+# - Floating Point Unit (FPU)
+# - MultiMedia eXtension (MMX)
+# - Streaming SIMD Extensions (SSE)
+# - 3DNow
+# - Advanced Vector Extensions (AVX)
+# - Fused Multiply Add Operations (FMA)
+# - eXtended Operations (XOP)
+# - Transactional Synchronization Extensions (TSX)
+x86-reduce = []
+
+
+# If this is enabled the AT&T syntax for X86 will be disabled reducing the
+# binary size.
+x86-disable-att = []
+
+[dependencies]
+libc = "0.2"
+bitflags = "1"
+
+[build-dependencies]
+cc = "1.0"

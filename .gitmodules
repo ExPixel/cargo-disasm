@@ -1,0 +1,3 @@
+[submodule "capstone/clib"]
+	path = capstone/clib
+	url = https://github.com/aquynh/capstone.git
