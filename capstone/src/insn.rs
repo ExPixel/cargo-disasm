@@ -231,17 +231,16 @@ mod test {
     use super::*;
     use crate::sys;
 
-    // FIXME reenable this test
-    //     #[test]
-    //     fn detail_size_and_alignment() {
-    //         assert_eq!(core::mem::size_of::<Detail>(), unsafe {
-    //             sys::ep_helper__sizeof_cs_detail() as usize
-    //         });
+    #[test]
+    fn detail_size_and_alignment() {
+        assert_eq!(core::mem::size_of::<Detail>(), unsafe {
+            sys::ep_helper__sizeof_cs_detail() as usize
+        });
 
-    //         assert_eq!(core::mem::align_of::<Detail>(), unsafe {
-    //             sys::ep_helper__alignof_cs_detail() as usize
-    //         });
-    //     }
+        assert_eq!(core::mem::align_of::<Detail>(), unsafe {
+            sys::ep_helper__alignof_cs_detail() as usize
+        });
+    }
 
     #[test]
     fn insn_size_and_alignment() {
