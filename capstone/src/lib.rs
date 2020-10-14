@@ -3,26 +3,24 @@
 #[cfg(all(not(feature = "std"), feature = "alloc"))]
 extern crate alloc;
 
-#[cfg(feature = "std")]
-use std as alloc;
-
 #[macro_use]
 mod macros;
-mod arch;
+pub mod arch;
 mod insn;
 mod sys;
 mod util;
 
-use core::convert::From;
-use core::convert::TryFrom;
-use core::fmt;
-use core::ptr::NonNull;
+use core::{
+    convert::{From, TryFrom},
+    fmt,
+    ptr::NonNull,
+};
 
 #[cfg(feature = "std")]
-use std::panic::UnwindSafe;
+use std::{self as alloc, cell::RefCell, panic::UnwindSafe};
 
 pub use arch::InsnId;
-pub use insn::{Insn, InsnBuffer};
+pub use insn::{Insn, InsnBuffer, InsnIter};
 
 #[cfg(feature = "std")]
 pub type SkipdataCallback = dyn 'static + UnwindSafe + FnMut(&[u8], usize) -> usize;
@@ -47,7 +45,7 @@ pub struct Capstone {
     skipdata_callback: Option<SkipdataCallback>,
 
     #[cfg(feature = "std")]
-    pending_panic: Option<Box<dyn std::any::Any + Send + 'static>>,
+    pending_panic: RefCell<Option<Box<dyn std::any::Any + Send + 'static>>>,
 }
 
 impl Capstone {
@@ -66,20 +64,89 @@ impl Capstone {
                 skipdata_mnemonic: None,
 
                 #[cfg(feature = "std")]
-                pending_panic: None,
+                pending_panic: RefCell::new(None),
             }
         }
     }
 
-    /// Disassembles a binary given a buffer, a starting address, and the number
-    /// of instructions to disassemble. This API will dynamically allocate
-    /// memory to contain the disassembled instructions.
-    pub fn disasm(&self, code: &[u8], address: u64, count: usize) {
-        todo!();
+    /// Reports the last error that occurred in the API after a function
+    /// has failed. Like glibc's errno, this might not retain its old value
+    /// once it has been accessed.
+    fn errno(&self) -> Result<(), Error> {
+        result!(unsafe { sys::cs_errno(self.handle) })
     }
 
-    pub fn disasm_iter(&self, code: &[u8], address: u64) {
-        todo!();
+    /// Disassembles all of the instructions in a buffer with the given
+    /// starting address. This will dynamically allocate memory to
+    /// contain the disassembled instructions.
+    pub fn disasm<'s>(&'s self, code: &[u8], address: u64) -> Result<InsnBuffer<'s>, Error> {
+        self.priv_disasm(code, address, 0)
+    }
+
+    /// Disassembles at most `count` instructions from the buffer using
+    /// the given starting address. This will dynamically allocate memory
+    /// to contain the disassembled instructions.
+    pub fn disasm_count<'s>(
+        &'s self,
+        code: &[u8],
+        address: u64,
+        count: usize,
+    ) -> Result<InsnBuffer<'s>, Error> {
+        if count == 0 {
+            Ok(InsnBuffer::new(NonNull::dangling().as_ptr(), 0))
+        } else {
+            self.priv_disasm(code, address, count)
+        }
+    }
+
+    /// Disassembles a binary given a buffer, a starting address, and the number
+    /// of instructions to disassemble. If `count` is `0`, this will disassbmle
+    /// all of the instructiosn in the buffer. This API will dynamically allocate
+    /// memory to contain the disassembled instructions.
+    fn priv_disasm<'s>(
+        &'s self,
+        code: &[u8],
+        address: u64,
+        count: usize,
+    ) -> Result<InsnBuffer<'s>, Error> {
+        let mut insn: *mut Insn = core::ptr::null_mut();
+
+        // the real count
+        let count = unsafe {
+            sys::cs_disasm(
+                self.handle,
+                code.as_ptr(),
+                code.len() as libc::size_t,
+                address,
+                count as libc::size_t,
+                &mut insn,
+            )
+        } as usize;
+
+        #[cfg(feature = "std")]
+        self.resume_panic();
+
+        if count == 0 {
+            self.errno()?;
+            return Err(Error::Bindings);
+        }
+
+        Ok(InsnBuffer::new(insn, count))
+    }
+
+    /// Returns an iterator that will lazily disassemble the instructions
+    /// in the given binary.
+    pub fn disasm_iter<'s>(&'s self, code: &[u8], address: u64) -> InsnIter<'s> {
+        let insn = unsafe { sys::cs_malloc(self.handle) };
+        assert!(!insn.is_null(), "cs_malloc() returned a null insn");
+
+        InsnIter::new(
+            self,
+            insn,
+            code.as_ptr(),
+            code.len() as libc::size_t,
+            address,
+        )
     }
 
     /// Sets the assembly syntax for the disassembling engine at runtime.
@@ -97,6 +164,11 @@ impl Capstone {
             }
             Syntax::MASM => self.set_option(sys::OptType::Syntax, sys::OPT_VALUE_SYNTAX_MASM),
         }
+    }
+
+    /// Change the engine's mode at runtime after it has been initialized.
+    pub fn set_mode(&mut self, mode: Mode) -> Result<(), Error> {
+        self.set_option(sys::OptType::Mode, mode.bits() as libc::size_t)
     }
 
     /// Setting `detail` to true will make the disassembling engine break
@@ -305,9 +377,13 @@ impl Capstone {
 
     /// If there is a panic waiting in [`Capstone::pending_panic`], this will
     /// resume it.
-    fn resume_panic(&mut self) {
-        #[cfg(feature = "std")]
-        if let Some(p) = self.pending_panic.take() {
+    #[cfg(feature = "std")]
+    fn resume_panic(&self) {
+        if self.pending_panic.borrow().is_none() {
+            return;
+        }
+
+        if let Some(p) = self.pending_panic.borrow_mut().take() {
             std::panic::resume_unwind(p);
         }
     }
@@ -382,7 +458,9 @@ extern "C" fn cs_skipdata_cb(
 
     #[cfg(feature = "std")]
     unsafe {
-        if (*userdata).pending_panic.is_some() {
+        // Don't allow any callbacks to be used again if there is a panic
+        // that has not yet been handled.
+        if (*userdata).pending_panic.borrow().is_some() {
             return 0;
         }
 
@@ -403,7 +481,7 @@ extern "C" fn cs_skipdata_cb(
         }) {
             Ok(ret) => ret as libc::size_t,
             Err(p) => {
-                (*userdata).pending_panic = Some(p);
+                *(*userdata).pending_panic.borrow_mut() = Some(p);
                 0
             }
         }
@@ -773,7 +851,11 @@ mod test {
 
     #[test]
     fn open_capstone() {
-        Capstone::open(Arch::X86, Mode::LittleEndian).expect("failed to open capstone");
+        let caps = Capstone::open(Arch::X86, Mode::LittleEndian).expect("failed to open capstone");
+
+        for insn in caps.disasm(&[0xcc], 0x0).unwrap().iter() {
+            println!("{} {}", insn.mnemonic(), insn.operands());
+        }
     }
 
     #[test]
