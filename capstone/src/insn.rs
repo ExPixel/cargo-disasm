@@ -1,4 +1,6 @@
-use crate::arch::x86;
+use crate::arch::{
+    arm, arm64, evm, m680x, m68k, mips, mos65xx, ppc, sparc, sysz, tms320c64x, x86, xcore,
+};
 use crate::{sys, util};
 use core::marker::PhantomData;
 use core::ptr::NonNull;
@@ -224,6 +226,18 @@ struct Details {
 #[repr(C)]
 union ArchDetails {
     x86: x86::Details,
+    arm64: arm64::Details,
+    arm: arm::Details,
+    m68k: m68k::Details,
+    mips: mips::Details,
+    ppc: ppc::Details,
+    sparc: sparc::Details,
+    sysz: sysz::Details,
+    xcore: xcore::Details,
+    tms320c64x: tms320c64x::Details,
+    m680x: m680x::Details,
+    evm: evm::Details,
+    mos65xx: mos65xx::Details,
 }
 
 #[cfg(test)]
@@ -233,11 +247,11 @@ mod test {
 
     #[test]
     fn detail_size_and_alignment() {
-        assert_eq!(core::mem::size_of::<Detail>(), unsafe {
+        assert_eq!(core::mem::size_of::<Details>(), unsafe {
             sys::ep_helper__sizeof_cs_detail() as usize
         });
 
-        assert_eq!(core::mem::align_of::<Detail>(), unsafe {
+        assert_eq!(core::mem::align_of::<Details>(), unsafe {
             sys::ep_helper__alignof_cs_detail() as usize
         });
     }

@@ -20,7 +20,7 @@ macro_rules! result {
 macro_rules! c_enum {
     (
         $(#[$enum_meta:meta])*
-        $vis:vis enum $EnumName:ident:$Primitive:ident $(+ $ExtraPrimitive:ident)* {
+        $vis:vis enum $EnumName:ident:$Primitive:ident $(+ $ExtraPrimitive:path)* {
             $(
                 $(#[$variant_meta:meta])*
                 $Variant:ident $(= $Value:expr)?

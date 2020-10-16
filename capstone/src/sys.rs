@@ -35,6 +35,33 @@ extern "C" {
 
     pub fn ep_helper__sizeof_cs_detail() -> libc::size_t;
     pub fn ep_helper__alignof_cs_detail() -> libc::size_t;
+
+    pub fn ep_helper__sizeof_cs_x86() -> libc::size_t;
+    pub fn ep_helper__alignof_cs_x86() -> libc::size_t;
+    pub fn ep_helper__sizeof_cs_arm64() -> libc::size_t;
+    pub fn ep_helper__alignof_cs_arm64() -> libc::size_t;
+    pub fn ep_helper__sizeof_cs_arm() -> libc::size_t;
+    pub fn ep_helper__alignof_cs_arm() -> libc::size_t;
+    pub fn ep_helper__sizeof_cs_m68k() -> libc::size_t;
+    pub fn ep_helper__alignof_cs_m68k() -> libc::size_t;
+    pub fn ep_helper__sizeof_cs_mips() -> libc::size_t;
+    pub fn ep_helper__alignof_cs_mips() -> libc::size_t;
+    pub fn ep_helper__sizeof_cs_ppc() -> libc::size_t;
+    pub fn ep_helper__alignof_cs_ppc() -> libc::size_t;
+    pub fn ep_helper__sizeof_cs_sparc() -> libc::size_t;
+    pub fn ep_helper__alignof_cs_sparc() -> libc::size_t;
+    pub fn ep_helper__sizeof_cs_sysz() -> libc::size_t;
+    pub fn ep_helper__alignof_cs_sysz() -> libc::size_t;
+    pub fn ep_helper__sizeof_cs_xcore() -> libc::size_t;
+    pub fn ep_helper__alignof_cs_xcore() -> libc::size_t;
+    pub fn ep_helper__sizeof_cs_tms320c64x() -> libc::size_t;
+    pub fn ep_helper__alignof_cs_tms320c64x() -> libc::size_t;
+    pub fn ep_helper__sizeof_cs_m680x() -> libc::size_t;
+    pub fn ep_helper__alignof_cs_m680x() -> libc::size_t;
+    pub fn ep_helper__sizeof_cs_evm() -> libc::size_t;
+    pub fn ep_helper__alignof_cs_evm() -> libc::size_t;
+    pub fn ep_helper__sizeof_cs_mos65xx() -> libc::size_t;
+    pub fn ep_helper__alignof_cs_mos65xx() -> libc::size_t;
 }
 
 pub type SkipdataCallback = extern "C" fn(

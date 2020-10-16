@@ -22,6 +22,33 @@ use std::{self as alloc, cell::RefCell, panic::UnwindSafe};
 pub use arch::InsnId;
 pub use insn::{Insn, InsnBuffer, InsnIter};
 
+#[doc(inline)]
+pub use arch::arm;
+#[doc(inline)]
+pub use arch::arm64;
+#[doc(inline)]
+pub use arch::evm;
+#[doc(inline)]
+pub use arch::m680x;
+#[doc(inline)]
+pub use arch::m68k;
+#[doc(inline)]
+pub use arch::mips;
+#[doc(inline)]
+pub use arch::mos65xx;
+#[doc(inline)]
+pub use arch::ppc;
+#[doc(inline)]
+pub use arch::sparc;
+#[doc(inline)]
+pub use arch::sysz;
+#[doc(inline)]
+pub use arch::tms320c64x;
+#[doc(inline)]
+pub use arch::x86;
+#[doc(inline)]
+pub use arch::xcore;
+
 #[cfg(feature = "std")]
 pub type SkipdataCallback = dyn 'static + UnwindSafe + FnMut(&[u8], usize) -> usize;
 
@@ -158,11 +185,11 @@ impl Capstone {
         match syntax {
             Syntax::Default => self.set_option(sys::OptType::Syntax, sys::OPT_VALUE_SYNTAX_DEFAULT),
             Syntax::Intel => self.set_option(sys::OptType::Syntax, sys::OPT_VALUE_SYNTAX_INTEL),
-            Syntax::ATT => self.set_option(sys::OptType::Syntax, sys::OPT_VALUE_SYNTAX_ATT),
+            Syntax::Att => self.set_option(sys::OptType::Syntax, sys::OPT_VALUE_SYNTAX_ATT),
             Syntax::NoRegName => {
                 self.set_option(sys::OptType::Syntax, sys::OPT_VALUE_SYNTAX_NOREGNAME)
             }
-            Syntax::MASM => self.set_option(sys::OptType::Syntax, sys::OPT_VALUE_SYNTAX_MASM),
+            Syntax::Masm => self.set_option(sys::OptType::Syntax, sys::OPT_VALUE_SYNTAX_MASM),
         }
     }
 
@@ -509,11 +536,11 @@ pub enum Syntax {
     /// Intel assembly syntax.
     Intel,
     /// AT&T assembly syntax.
-    ATT,
+    Att,
     /// Print register names as numbers.
     NoRegName,
     /// Intel MASM assembly syntax.
-    MASM,
+    Masm,
 }
 
 impl Default for Syntax {
@@ -541,17 +568,17 @@ c_enum! {
     #[derive(Copy, Clone, Debug, Hash, PartialEq, Eq)]
     pub enum Arch: u8 + i32 + u32 {
         /// ARM architecture (including Thumb, Thumb-2)
-        ARM,
+        Arm,
         /// ARM-64, also called AArch64
-        ARM64,
+        Arm64,
         /// Mips architecture
-        MIPS,
+        Mips,
         /// X86 architecture (including x86 & x86-64)
         X86,
         /// PowerPC architecture
         PowerPC,
         /// Sparc architecture
-        SPARC,
+        Sparc,
         /// SystemZ architecture
         SystemZ,
         /// XCore architecture
@@ -559,13 +586,13 @@ c_enum! {
         /// 68K architecture
         M68K,
         /// TMS320C64x architecture
-        TMS320C64X,
+        Tms320C64X,
         /// 680X architecture
         M680X,
         /// Ethereum architecture
-        EVM,
+        Evm,
         /// MOS65XX architecture (including MOS6502)
-        MOS65XX,
+        Mos65XX,
     }
 }
 
@@ -608,7 +635,7 @@ mod mode {
             /// little-endian mode (default mode)
             const LittleEndian = 0;
             /// 32-bit ARM
-            const ARM = 0;
+            const Arm = 0;
             /// 16-bit mode (X86)
             const Bits16 = 1 << 1;
             /// 32-bit mode (X86)
@@ -624,15 +651,15 @@ mod mode {
             /// MicroMips mode (MIPS)
             const Micro = 1 << 4;
             /// MIPS III ISA
-            const MIPS3 = 1 << 5;
+            const Mips3 = 1 << 5;
             /// MIPS32R6 ISA
-            const MIPS32R6 = 1 << 6;
+            const Mips32R6 = 1 << 6;
             /// Mips II ISA
-            const MIPS2 = 1 << 7;
+            const Mips2 = 1 << 7;
             /// SparcV9 mode (Sparc)
             const V9 = 1 << 4;
             /// Quad Processing eXtensions mode (PPC)
-            const QPX = 1 << 4;
+            const Qpx = 1 << 4;
             /// M68K 68000 mode
             const M68K000 = 1 << 1;
             /// M68K 68010 mode
@@ -648,9 +675,9 @@ mod mode {
             /// big-endian mode
             const BigEndian = 1 << 31;
             /// MIPS32 ISA (Mips)
-            const MIPS32 = Self::Bits32.bits;
+            const Mips32 = Self::Bits32.bits;
             /// MIPS64 ISA (Mips)
-            const MIPS64 = Self::Bits64.bits;
+            const Mips64 = Self::Bits64.bits;
             /// M680X Hitachi 6301,6303 mode
             const M680X6301 = 1 << 1;
             /// M680X Hitachi 6309 mode
@@ -713,11 +740,11 @@ c_enum! {
         /// Accessed irrelevant data for "data" instruction in SKIPDATA mode.
         Skipdata,
         /// X86 AT&T syntax is unsupported (opted out at compile time).
-        X86ATT,
+        X86Att,
         /// X86 Intel syntex is unsupported (opted out at compile time).
         X86Intel,
         /// X86 MASM syntex is unsupported (opted out at compile time).
-        X86MASM,
+        X86Masm,
         /// An error occurred in the bindings. Truly terrible.
         Bindings,
     }
@@ -737,9 +764,9 @@ impl fmt::Display for Error {
             Error::Version => "unsupported version",
             Error::Diet => "accessed irrelevant data in diet engine",
             Error::Skipdata => "accessed irrelevant data for data instruction in skipdata mode",
-            Error::X86ATT => "X86 AT&T syntax is unsupported",
+            Error::X86Att => "X86 AT&T syntax is unsupported",
             Error::X86Intel => "X86 Intel syntex is unsupported",
-            Error::X86MASM => "X86 MASM syntex is unsupported",
+            Error::X86Masm => "X86 MASM syntex is unsupported",
             Error::Bindings => "bindings error (please file an issue)",
         };
 
@@ -834,19 +861,19 @@ mod test {
     use super::*;
 
     const ALL_ARCHS: &[Arch] = &[
-        Arch::ARM,
-        Arch::ARM64,
-        Arch::MIPS,
+        Arch::Arm,
+        Arch::Arm64,
+        Arch::Mips,
         Arch::X86,
         Arch::PowerPC,
-        Arch::SPARC,
+        Arch::Sparc,
         Arch::SystemZ,
         Arch::XCore,
         Arch::M68K,
-        Arch::TMS320C64X,
+        Arch::Tms320C64X,
         Arch::M680X,
-        Arch::EVM,
-        Arch::MOS65XX,
+        Arch::Evm,
+        Arch::Mos65XX,
     ];
 
     #[test]
@@ -895,19 +922,19 @@ mod test {
 
     #[test]
     fn test_support() {
-        assert_eq!(supports(Arch::ARM), cfg!(feature = "arm"));
-        assert_eq!(supports(Arch::ARM64), cfg!(feature = "aarch64"));
-        assert_eq!(supports(Arch::MIPS), cfg!(feature = "mips"));
+        assert_eq!(supports(Arch::Arm), cfg!(feature = "arm"));
+        assert_eq!(supports(Arch::Arm64), cfg!(feature = "aarch64"));
+        assert_eq!(supports(Arch::Mips), cfg!(feature = "mips"));
         assert_eq!(supports(Arch::X86), cfg!(feature = "x86"));
         assert_eq!(supports(Arch::PowerPC), cfg!(feature = "powerpc"));
-        assert_eq!(supports(Arch::SPARC), cfg!(feature = "sparc"));
+        assert_eq!(supports(Arch::Sparc), cfg!(feature = "sparc"));
         assert_eq!(supports(Arch::SystemZ), cfg!(feature = "systemz"));
         assert_eq!(supports(Arch::XCore), cfg!(feature = "xcore"));
         assert_eq!(supports(Arch::M68K), cfg!(feature = "m68k"));
-        assert_eq!(supports(Arch::TMS320C64X), cfg!(feature = "tms320c64x"));
+        assert_eq!(supports(Arch::Tms320C64X), cfg!(feature = "tms320c64x"));
         assert_eq!(supports(Arch::M680X), cfg!(feature = "m680x"));
-        assert_eq!(supports(Arch::EVM), cfg!(feature = "evm"));
-        assert_eq!(supports(Arch::MOS65XX), cfg!(feature = "mos65xx"));
+        assert_eq!(supports(Arch::Evm), cfg!(feature = "evm"));
+        assert_eq!(supports(Arch::Mos65XX), cfg!(feature = "mos65xx"));
 
         assert_eq!(supports(SupportQuery::Diet), cfg!(feature = "diet"));
         assert_eq!(

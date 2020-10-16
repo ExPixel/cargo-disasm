@@ -24,6 +24,17 @@
 
 ep_helper__define_size_helper(cs_insn)
 ep_helper__define_size_helper(cs_detail)
+
 ep_helper__define_size_helper(cs_x86)
-ep_helper__define_size_helper(cs_arm)
 ep_helper__define_size_helper(cs_arm64)
+ep_helper__define_size_helper(cs_arm)
+ep_helper__define_size_helper(cs_m68k)
+ep_helper__define_size_helper(cs_mips)
+ep_helper__define_size_helper(cs_ppc)
+ep_helper__define_size_helper(cs_sparc)
+ep_helper__define_size_helper(cs_sysz)
+ep_helper__define_size_helper(cs_xcore)
+ep_helper__define_size_helper(cs_tms320c64x)
+ep_helper__define_size_helper(cs_m680x)
+ep_helper__define_size_helper(cs_evm)
+ep_helper__define_size_helper(cs_mos65xx)
