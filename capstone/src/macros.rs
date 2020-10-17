@@ -60,6 +60,21 @@ macro_rules! c_enum {
                     e as $Primitive as $ExtraPrimitive
                 }
             }
+
+            impl core::convert::TryFrom<$ExtraPrimitive> for $EnumName {
+                type Error = ();
+
+                fn try_from(primitive: $ExtraPrimitive) -> Result<Self, Self::Error> {
+                    // FIXME: while this does guard against possible undefined behavior through bad
+                    // values, as long as the C API does not have a bug it should be fine to
+                    // use an `as $Primitive` instead. I will leave this here for now though.
+                    if let Ok(p) = <$Primitive as core::convert::TryFrom<$ExtraPrimitive>>::try_from(primitive) {
+                        <$EnumName as core::convert::TryFrom<$Primitive>>::try_from(p)
+                    } else {
+                        Err(())
+                    }
+                }
+            }
         )*
     };
 }
@@ -67,7 +82,7 @@ macro_rules! c_enum {
 macro_rules! c_enum_big {
     (
         $(#[$enum_meta:meta])*
-        $vis:vis enum $EnumName:ident:$Primitive:ident $(+ $ExtraPrimitive:ident)* {
+        $vis:vis enum $EnumName:ident:$Primitive:ident $(+ $ExtraPrimitive:path)* {
             @Start = $StartVariant:ident,
             @End   = $EndVariant:ident,
             $(
@@ -107,6 +122,21 @@ macro_rules! c_enum_big {
             impl core::convert::From<$EnumName> for $ExtraPrimitive {
                 fn from(e: $EnumName) -> $ExtraPrimitive {
                     e as $Primitive as $ExtraPrimitive
+                }
+            }
+
+            impl core::convert::TryFrom<$ExtraPrimitive> for $EnumName {
+                type Error = ();
+
+                fn try_from(primitive: $ExtraPrimitive) -> Result<Self, Self::Error> {
+                    // FIXME: while this does guard against possible undefined behavior through bad
+                    // values, as long as the C API does not have a bug it should be fine to
+                    // use an `as $Primitive` instead. I will leave this here for now though.
+                    if let Ok(p) = <$Primitive as core::convert::TryFrom<$ExtraPrimitive>>::try_from(primitive) {
+                        <$EnumName as core::convert::TryFrom<$Primitive>>::try_from(p)
+                    } else {
+                        Err(())
+                    }
                 }
             }
         )*
