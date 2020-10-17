@@ -30,38 +30,17 @@ extern "C" {
 
 #[cfg(test)]
 extern "C" {
-    pub fn ep_helper__sizeof_cs_insn() -> libc::size_t;
-    pub fn ep_helper__alignof_cs_insn() -> libc::size_t;
+    fn ep_helper__get_value(name: *const libc::c_char, len: libc::size_t) -> libc::size_t;
+}
 
-    pub fn ep_helper__sizeof_cs_detail() -> libc::size_t;
-    pub fn ep_helper__alignof_cs_detail() -> libc::size_t;
-
-    pub fn ep_helper__sizeof_cs_x86() -> libc::size_t;
-    pub fn ep_helper__alignof_cs_x86() -> libc::size_t;
-    pub fn ep_helper__sizeof_cs_arm64() -> libc::size_t;
-    pub fn ep_helper__alignof_cs_arm64() -> libc::size_t;
-    pub fn ep_helper__sizeof_cs_arm() -> libc::size_t;
-    pub fn ep_helper__alignof_cs_arm() -> libc::size_t;
-    pub fn ep_helper__sizeof_cs_m68k() -> libc::size_t;
-    pub fn ep_helper__alignof_cs_m68k() -> libc::size_t;
-    pub fn ep_helper__sizeof_cs_mips() -> libc::size_t;
-    pub fn ep_helper__alignof_cs_mips() -> libc::size_t;
-    pub fn ep_helper__sizeof_cs_ppc() -> libc::size_t;
-    pub fn ep_helper__alignof_cs_ppc() -> libc::size_t;
-    pub fn ep_helper__sizeof_cs_sparc() -> libc::size_t;
-    pub fn ep_helper__alignof_cs_sparc() -> libc::size_t;
-    pub fn ep_helper__sizeof_cs_sysz() -> libc::size_t;
-    pub fn ep_helper__alignof_cs_sysz() -> libc::size_t;
-    pub fn ep_helper__sizeof_cs_xcore() -> libc::size_t;
-    pub fn ep_helper__alignof_cs_xcore() -> libc::size_t;
-    pub fn ep_helper__sizeof_cs_tms320c64x() -> libc::size_t;
-    pub fn ep_helper__alignof_cs_tms320c64x() -> libc::size_t;
-    pub fn ep_helper__sizeof_cs_m680x() -> libc::size_t;
-    pub fn ep_helper__alignof_cs_m680x() -> libc::size_t;
-    pub fn ep_helper__sizeof_cs_evm() -> libc::size_t;
-    pub fn ep_helper__alignof_cs_evm() -> libc::size_t;
-    pub fn ep_helper__sizeof_cs_mos65xx() -> libc::size_t;
-    pub fn ep_helper__alignof_cs_mos65xx() -> libc::size_t;
+#[cfg(test)]
+pub fn get_test_val(name: &str) -> usize {
+    unsafe {
+        ep_helper__get_value(
+            name.as_ptr() as *const libc::c_char,
+            name.len() as libc::size_t,
+        ) as usize
+    }
 }
 
 pub type SkipdataCallback = extern "C" fn(

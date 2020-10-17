@@ -247,23 +247,27 @@ mod test {
 
     #[test]
     fn detail_size_and_alignment() {
-        assert_eq!(core::mem::size_of::<Details>(), unsafe {
-            sys::ep_helper__sizeof_cs_detail() as usize
-        });
+        assert_eq!(
+            core::mem::size_of::<Details>(),
+            sys::get_test_val("sizeof(cs_detail)")
+        );
 
-        assert_eq!(core::mem::align_of::<Details>(), unsafe {
-            sys::ep_helper__alignof_cs_detail() as usize
-        });
+        assert_eq!(
+            core::mem::align_of::<Details>(),
+            sys::get_test_val("alignof(cs_detail)")
+        );
     }
 
     #[test]
     fn insn_size_and_alignment() {
-        assert_eq!(core::mem::size_of::<Insn>(), unsafe {
-            sys::ep_helper__sizeof_cs_insn() as usize
-        });
+        assert_eq!(
+            core::mem::size_of::<Insn>(),
+            sys::get_test_val("sizeof(cs_insn)")
+        );
 
-        assert_eq!(core::mem::align_of::<Insn>(), unsafe {
-            sys::ep_helper__alignof_cs_insn() as usize
-        });
+        assert_eq!(
+            core::mem::align_of::<Insn>(),
+            sys::get_test_val("alignof(cs_insn)")
+        );
     }
 }

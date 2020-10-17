@@ -11,12 +11,14 @@ mod test {
 
     #[test]
     fn mos65xx_size_and_alignment() {
-        assert_eq!(core::mem::size_of::<Details>(), unsafe {
-            sys::ep_helper__sizeof_cs_mos65xx() as usize
-        });
+        assert_eq!(
+            core::mem::size_of::<Details>(),
+            sys::get_test_val("sizeof(cs_mos65xx)")
+        );
 
-        assert_eq!(core::mem::align_of::<Details>(), unsafe {
-            sys::ep_helper__alignof_cs_mos65xx() as usize
-        });
+        assert_eq!(
+            core::mem::align_of::<Details>(),
+            sys::get_test_val("alignof(cs_mos65xx)")
+        );
     }
 }

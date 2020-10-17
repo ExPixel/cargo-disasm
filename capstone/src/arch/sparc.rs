@@ -11,12 +11,14 @@ mod test {
 
     #[test]
     fn sparc_size_and_alignment() {
-        assert_eq!(core::mem::size_of::<Details>(), unsafe {
-            sys::ep_helper__sizeof_cs_sparc() as usize
-        });
+        assert_eq!(
+            core::mem::size_of::<Details>(),
+            sys::get_test_val("sizeof(cs_sparc)")
+        );
 
-        assert_eq!(core::mem::align_of::<Details>(), unsafe {
-            sys::ep_helper__alignof_cs_sparc() as usize
-        });
+        assert_eq!(
+            core::mem::align_of::<Details>(),
+            sys::get_test_val("alignof(cs_sparc)")
+        );
     }
 }

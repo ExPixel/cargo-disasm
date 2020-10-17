@@ -566,7 +566,7 @@ impl fmt::Display for CapstoneVersion {
 
 c_enum! {
     #[derive(Copy, Clone, Debug, Hash, PartialEq, Eq)]
-    pub enum Arch: u8 + i32 + u32 {
+    pub enum Arch: u8 {
         /// ARM architecture (including Thumb, Thumb-2)
         Arm,
         /// ARM-64, also called AArch64
@@ -713,7 +713,7 @@ impl From<Mode> for sys::Mode {
 
 c_enum! {
     #[derive(Clone, Copy, Debug, Hash, PartialEq, Eq)]
-    pub enum Error: u8 + i32 + u32 {
+    pub enum Error {
         /// Out of memory error.
         Memory = 1,
         /// Unsupported architecture.

@@ -359,7 +359,7 @@ c_enum! {
 c_enum! {
     /// Operand type for an x86 instruction's operands.
     #[derive(Copy, Clone, Debug, Hash, PartialEq, Eq)]
-    pub enum OpType: u8 + libc::c_int {
+    pub enum OpType {
         /// Uninitialized.
         Invalid = 0,
         /// Register operand.
@@ -374,7 +374,7 @@ c_enum! {
 c_enum! {
     /// XOP Code Condition Type.
     #[derive(Copy, Clone, Debug, Hash, PartialEq, Eq)]
-    pub enum XopCC: u8 + libc::c_int {
+    pub enum XopCC {
         /// Uninitialized.
         Invalid = 0,
         Lt,
@@ -391,7 +391,7 @@ c_enum! {
 c_enum! {
     /// AXV broadcast type.
     #[derive(Copy, Clone, Debug, Hash, PartialEq, Eq)]
-    pub enum AvxBroadcast: u8 + libc::c_int {
+    pub enum AvxBroadcast {
         Invalid = 0,
         /// AVX 512 broadcast type {1to2}
         To2,
@@ -407,7 +407,7 @@ c_enum! {
 c_enum! {
     /// SSE condition codes.
     #[derive(Copy, Clone, Debug, Hash, PartialEq, Eq)]
-    pub enum SseCC: u8 + libc::c_int {
+    pub enum SseCC {
         Invalid = 0,
         Eq,
         Lt,
@@ -423,7 +423,7 @@ c_enum! {
 c_enum! {
     /// AVX condition codes.
     #[derive(Copy, Clone, Debug, Hash, PartialEq, Eq)]
-    pub enum AvxCC: u8 + libc::c_int {
+    pub enum AvxCC {
         Invalid = 0,
         Eq,
         Lt,
@@ -463,7 +463,7 @@ c_enum! {
 c_enum! {
     /// AVX rounding modes.
     #[derive(Copy, Clone, Debug, Hash, PartialEq, Eq)]
-    pub enum AvxRm: u8 + libc::c_int {
+    pub enum AvxRm {
         Invalid = 0,
         /// Round to nearest.
         Rn,
@@ -599,27 +599,10 @@ union X86OpValue {
     mem: OpMem,
 }
 
-#[cfg(test)]
-mod test {
-    use super::*;
-    use crate::sys;
-
-    #[test]
-    fn x86_size_and_alignment() {
-        assert_eq!(core::mem::size_of::<Details>(), unsafe {
-            sys::ep_helper__sizeof_cs_x86() as usize
-        });
-
-        assert_eq!(core::mem::align_of::<Details>(), unsafe {
-            sys::ep_helper__alignof_cs_x86() as usize
-        });
-    }
-}
-
 c_enum_big! {
     #[non_exhaustive]
     #[derive(Copy, Clone, PartialEq, Eq)]
-    pub enum Reg: u8 + libc::c_int {
+    pub enum Reg {
         @Start = Invalid,
         @End   = Ending,
 
@@ -874,7 +857,7 @@ c_enum_big! {
 c_enum_big! {
     #[non_exhaustive]
     #[derive(Copy, Clone, PartialEq, Eq)]
-    pub enum Insn: u16 + libc::c_int {
+    pub enum Insn {
         @Start = Invalid,
         @End   = Ending,
 
@@ -2399,7 +2382,7 @@ c_enum_big! {
 c_enum_big! {
     #[non_exhaustive]
     #[derive(Copy, Clone, PartialEq, Eq)]
-    pub enum InsnGroup: u8 + libc::c_int {
+    pub enum InsnGroup {
         @Start = Invalid,
         @End   = Ending,
 
@@ -2467,5 +2450,24 @@ c_enum_big! {
         Fpu,
 
         Ending,
+    }
+}
+
+#[cfg(test)]
+mod test {
+    use super::*;
+    use crate::sys;
+
+    #[test]
+    fn x86_size_and_alignment() {
+        assert_eq!(
+            core::mem::size_of::<Details>(),
+            sys::get_test_val("sizeof(cs_x86)")
+        );
+
+        assert_eq!(
+            core::mem::align_of::<Details>(),
+            sys::get_test_val("alignof(cs_x86)")
+        );
     }
 }
