@@ -1,7 +1,10 @@
+use core::marker::PhantomData;
+
 #[repr(C)]
 #[derive(Clone, Copy)]
-pub struct Details {
+pub struct Details<'c> {
     placeholder: [u8; 1768],
+    _phantom: PhantomData<&'c ()>,
 }
 
 #[cfg(test)]

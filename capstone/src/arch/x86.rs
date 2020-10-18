@@ -1,8 +1,10 @@
+use core::marker::PhantomData;
+
 use core::convert::TryFrom;
 
 #[repr(C)]
 #[derive(Clone, Copy)]
-pub struct Details {
+pub struct Details<'c> {
     /// Instruction prefix, which can be up to 4 bytes.
     /// A prefix byte gets value 0 when irrelevant.
     /// prefix[0] indicates REP/REPNE/LOCK prefix (See X86_PREFIX_REP/REPNE/LOCK above)
@@ -62,9 +64,10 @@ pub struct Details {
 
     /// Encoding information
     encoding: Encoding,
+    _phantom: PhantomData<&'c ()>,
 }
 
-impl Details {
+impl<'c> Details<'c> {
     /// Returns true if the instruction has the given prefix, or false otherwise.
     pub fn has_prefix(&self, mut prefix: Prefix) -> bool {
         if prefix == Prefix::RepE {
