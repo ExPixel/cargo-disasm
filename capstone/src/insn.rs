@@ -16,7 +16,7 @@ pub struct Insn<'a> {
     /// 'x86_insn' in x86.h for X86, etc...
     /// This information is available even when CS_OPT_DETAIL = CS_OPT_OFF
     /// NOTE: in Skipdata mode, "data" instruction has 0 for this id field.
-    id: libc::c_uint,
+    pub(crate) id: libc::c_uint,
 
     /// Address (EIP) of this instruction
     /// This information is available even when CS_OPT_DETAIL = CS_OPT_OFF
@@ -45,7 +45,7 @@ pub struct Insn<'a> {
     ///
     /// NOTE 2: when in Skipdata mode, or when detail mode is OFF, even if this pointer
     ///     is not NULL, its content is still irrelevant.
-    detail: Option<NonNull<Details>>,
+    pub(crate) detail: Option<NonNull<Details>>,
 
     /// Phantom data to tie the lifetime of the Insn to the Capstone instance.
     _phan: PhantomData<&'a ()>,
@@ -200,7 +200,7 @@ impl<'a> Drop for InsnIter<'a> {
 
 /// Wrapper around cs_detail.
 #[repr(C)]
-struct Details {
+pub struct Details {
     /// List of implicit registers read by this insn.
     regs_read: [u16; 16],
 
@@ -220,24 +220,40 @@ struct Details {
     groups_count: u8,
 
     /// Architecture specific details.
-    arch: ArchDetails,
+    pub(crate) arch: ArchDetailsUnion,
 }
 
 #[repr(C)]
-union ArchDetails {
-    x86: x86::Details,
-    arm64: arm64::Details,
-    arm: arm::Details,
-    m68k: m68k::Details,
-    mips: mips::Details,
-    ppc: ppc::Details,
-    sparc: sparc::Details,
-    sysz: sysz::Details,
-    xcore: xcore::Details,
-    tms320c64x: tms320c64x::Details,
-    m680x: m680x::Details,
-    evm: evm::Details,
-    mos65xx: mos65xx::Details,
+pub(crate) union ArchDetailsUnion {
+    pub x86: x86::Details,
+    pub arm64: arm64::Details,
+    pub arm: arm::Details,
+    pub m68k: m68k::Details,
+    pub mips: mips::Details,
+    pub ppc: ppc::Details,
+    pub sparc: sparc::Details,
+    pub sysz: sysz::Details,
+    pub xcore: xcore::Details,
+    pub tms320c64x: tms320c64x::Details,
+    pub m680x: m680x::Details,
+    pub evm: evm::Details,
+    pub mos65xx: mos65xx::Details,
+}
+
+pub enum ArchDetails<'i> {
+    X86(&'i x86::Details),
+    Arm64(&'i arm64::Details),
+    Arm(&'i arm::Details),
+    M68K(&'i m68k::Details),
+    Mips(&'i mips::Details),
+    PowerPc(&'i ppc::Details),
+    Sparc(&'i sparc::Details),
+    SystemZ(&'i sysz::Details),
+    XCore(&'i xcore::Details),
+    Tms320C64X(&'i tms320c64x::Details),
+    M680X(&'i m680x::Details),
+    Evm(&'i evm::Details),
+    Mos65xx(&'i mos65xx::Details),
 }
 
 #[cfg(test)]

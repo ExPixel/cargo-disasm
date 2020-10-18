@@ -12,11 +12,21 @@ pub mod tms320c64x;
 pub mod x86;
 pub mod xcore;
 
-pub enum InsnId {}
+#[derive(Copy, Clone)]
+pub enum InsnId {
+    X86(x86::InsnId),
+}
 
 impl core::convert::From<InsnId> for libc::c_int {
-    fn from(_id: InsnId) -> Self {
-        // FIXME implement this
-        0
+    fn from(id: InsnId) -> Self {
+        match id {
+            InsnId::X86(id) => id.into(),
+        }
+    }
+}
+
+impl From<x86::InsnId> for InsnId {
+    fn from(id: x86::InsnId) -> InsnId {
+        InsnId::X86(id)
     }
 }

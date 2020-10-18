@@ -857,7 +857,7 @@ c_enum_big! {
 c_enum_big! {
     #[non_exhaustive]
     #[derive(Copy, Clone, PartialEq, Eq)]
-    pub enum Insn {
+    pub enum InsnId {
         @Start = Invalid,
         @End   = Ending,
 

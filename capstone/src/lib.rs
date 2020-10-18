@@ -20,7 +20,7 @@ use core::{
 use std::{self as alloc, cell::RefCell, panic::UnwindSafe};
 
 pub use arch::InsnId;
-pub use insn::{Insn, InsnBuffer, InsnIter};
+pub use insn::{ArchDetails, Insn, InsnBuffer, InsnIter};
 
 #[doc(inline)]
 pub use arch::arm;
@@ -94,6 +94,38 @@ impl Capstone {
                 pending_panic: RefCell::new(None),
             }
         }
+    }
+
+    /// Retrieves some general details about an instruction. This value is
+    /// only available if the engine was not compiled in DIET mode and details
+    /// mode is turned on for this instance of Capstone.
+    pub fn insn_details<'i>(&self, insn: &'i Insn) -> Option<&'i insn::Details> {
+        if !self.detail() {
+            return None;
+        }
+        insn.detail.and_then(|v| unsafe { v.as_ptr().as_ref() })
+    }
+
+    /// Returns architecture specific details about an instruction.
+    /// This value is only available if the engine was not compiled in DIET mode
+    /// and details mode is turned on for this instance of Capstone.
+    pub fn arch_details<'i>(&self, insn: &'i Insn) -> Option<ArchDetails<'i>> {
+        let details = self.insn_details(insn)?;
+        Some(match self.arch() {
+            Arch::Arm => ArchDetails::Arm(unsafe { &details.arch.arm }),
+            Arch::Arm64 => ArchDetails::Arm64(unsafe { &details.arch.arm64 }),
+            Arch::Mips => ArchDetails::Mips(unsafe { &details.arch.mips }),
+            Arch::X86 => ArchDetails::X86(unsafe { &details.arch.x86 }),
+            Arch::PowerPc => ArchDetails::PowerPc(unsafe { &details.arch.ppc }),
+            Arch::Sparc => ArchDetails::Sparc(unsafe { &details.arch.sparc }),
+            Arch::SystemZ => ArchDetails::SystemZ(unsafe { &details.arch.sysz }),
+            Arch::XCore => ArchDetails::XCore(unsafe { &details.arch.xcore }),
+            Arch::M68K => ArchDetails::M68K(unsafe { &details.arch.m68k }),
+            Arch::Tms320C64X => ArchDetails::Tms320C64X(unsafe { &details.arch.tms320c64x }),
+            Arch::M680X => ArchDetails::M680X(unsafe { &details.arch.m680x }),
+            Arch::Evm => ArchDetails::Evm(unsafe { &details.arch.evm }),
+            Arch::Mos65xx => ArchDetails::Mos65xx(unsafe { &details.arch.mos65xx }),
+        })
     }
 
     /// Reports the last error that occurred in the API after a function
@@ -229,7 +261,15 @@ impl Capstone {
     }
 
     /// Customize the mnemonic for an instruction with an alternative name.
-    pub fn set_mnemonic(&mut self, insn: InsnId, mnemonic: &'static str) -> Result<(), Error> {
+    pub fn set_mnemonic<I>(&mut self, insn: I, mnemonic: &'static str) -> Result<(), Error>
+    where
+        I: Into<InsnId>,
+    {
+        self.set_mnemonic_inner(insn.into(), mnemonic)
+    }
+
+    /// Customize the mnemonic for an instruction with an alternative name.
+    fn set_mnemonic_inner(&mut self, insn: InsnId, mnemonic: &'static str) -> Result<(), Error> {
         let mut opt_mnem = sys::OptMnemonic {
             id: insn.into(),
             mnemonic: mnemonic.as_ptr() as *const libc::c_char,
@@ -576,7 +616,7 @@ c_enum! {
         /// X86 architecture (including x86 & x86-64)
         X86,
         /// PowerPC architecture
-        PowerPC,
+        PowerPc,
         /// Sparc architecture
         Sparc,
         /// SystemZ architecture
@@ -592,7 +632,7 @@ c_enum! {
         /// Ethereum architecture
         Evm,
         /// MOS65XX architecture (including MOS6502)
-        Mos65XX,
+        Mos65xx,
     }
 }
 
@@ -865,7 +905,7 @@ mod test {
         Arch::Arm64,
         Arch::Mips,
         Arch::X86,
-        Arch::PowerPC,
+        Arch::PowerPc,
         Arch::Sparc,
         Arch::SystemZ,
         Arch::XCore,
@@ -873,7 +913,7 @@ mod test {
         Arch::Tms320C64X,
         Arch::M680X,
         Arch::Evm,
-        Arch::Mos65XX,
+        Arch::Mos65xx,
     ];
 
     #[test]
@@ -926,7 +966,7 @@ mod test {
         assert_eq!(supports(Arch::Arm64), cfg!(feature = "aarch64"));
         assert_eq!(supports(Arch::Mips), cfg!(feature = "mips"));
         assert_eq!(supports(Arch::X86), cfg!(feature = "x86"));
-        assert_eq!(supports(Arch::PowerPC), cfg!(feature = "powerpc"));
+        assert_eq!(supports(Arch::PowerPc), cfg!(feature = "powerpc"));
         assert_eq!(supports(Arch::Sparc), cfg!(feature = "sparc"));
         assert_eq!(supports(Arch::SystemZ), cfg!(feature = "systemz"));
         assert_eq!(supports(Arch::XCore), cfg!(feature = "xcore"));
@@ -934,7 +974,7 @@ mod test {
         assert_eq!(supports(Arch::Tms320C64X), cfg!(feature = "tms320c64x"));
         assert_eq!(supports(Arch::M680X), cfg!(feature = "m680x"));
         assert_eq!(supports(Arch::Evm), cfg!(feature = "evm"));
-        assert_eq!(supports(Arch::Mos65XX), cfg!(feature = "mos65xx"));
+        assert_eq!(supports(Arch::Mos65xx), cfg!(feature = "mos65xx"));
 
         assert_eq!(supports(SupportQuery::Diet), cfg!(feature = "diet"));
         assert_eq!(
