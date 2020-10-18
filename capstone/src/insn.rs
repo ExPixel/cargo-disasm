@@ -198,60 +198,68 @@ impl<'a> Drop for InsnIter<'a> {
     }
 }
 
+/// Extra details about an isntruction.
 #[derive(Copy, Clone)]
-pub struct Details<'c> {
+pub struct Details<'i> {
     arch: Arch,
-    inner: &'c DetailsInner,
+    inner: &'i DetailsInner,
 }
 
-impl<'c> Details<'c> {
-    pub(crate) fn wrap(arch: Arch, inner: &'c DetailsInner) -> Details<'c> {
+impl<'i> Details<'i> {
+    pub(crate) fn wrap(arch: Arch, inner: &'i DetailsInner) -> Details<'i> {
         Details { arch, inner }
     }
 
-    /// Returns the architecture that these details are for.
-    pub fn arch(self) -> Arch {
-        self.arch
-    }
-
-    /// Returns a list of registers read by an instruction.
-    pub fn regs_read(self) -> &'c [GenericReg] {
+    /// Returns a list of registers that are **implicitly** read from by an instruction.
+    /// For explicitly read registers, use the architecture specific details to access
+    /// the operands of the instruction.
+    pub fn regs_read(self) -> &'i [GenericReg] {
         unsafe {
             &*(&self.inner.regs_read[..self.inner.regs_read_count as usize] as *const [u16]
                 as *const [GenericReg])
         }
     }
 
-    /// Returns a list of registers written to by this instruction.
-    pub fn regs_write(self) -> &'c [GenericReg] {
+    /// Returns a list of registers that are **implicitly** written to by this instruction.
+    /// For registers that are explicitly written to, use the architecture specific details
+    /// to access the operands of the instruction.
+    pub fn regs_write(self) -> &'i [GenericReg] {
         unsafe {
             &*(&self.inner.regs_write[..self.inner.regs_write_count as usize] as *const [u16]
                 as *const [GenericReg])
         }
     }
-}
 
-// /// Returns architecture specific details about an instruction.
-// /// This value is only available if the engine was not compiled in DIET mode
-// /// and details mode is turned on for this instance of Capstone.
-// pub fn arch_details<'i>(&self, insn: &'i Insn) -> Option<ArchDetails<'i>> {
-//     let details = self.insn_details(insn)?;
-//     Some(match self.arch() {
-//         Arch::Arm => ArchDetails::Arm(unsafe { &details.arch.arm }),
-//         Arch::Arm64 => ArchDetails::Arm64(unsafe { &details.arch.arm64 }),
-//         Arch::Mips => ArchDetails::Mips(unsafe { &details.arch.mips }),
-//         Arch::X86 => ArchDetails::X86(unsafe { &details.arch.x86 }),
-//         Arch::PowerPc => ArchDetails::PowerPc(unsafe { &details.arch.ppc }),
-//         Arch::Sparc => ArchDetails::Sparc(unsafe { &details.arch.sparc }),
-//         Arch::SystemZ => ArchDetails::SystemZ(unsafe { &details.arch.sysz }),
-//         Arch::XCore => ArchDetails::XCore(unsafe { &details.arch.xcore }),
-//         Arch::M68K => ArchDetails::M68K(unsafe { &details.arch.m68k }),
-//         Arch::Tms320C64X => ArchDetails::Tms320C64X(unsafe { &details.arch.tms320c64x }),
-//         Arch::M680X => ArchDetails::M680X(unsafe { &details.arch.m680x }),
-//         Arch::Evm => ArchDetails::Evm(unsafe { &details.arch.evm }),
-//         Arch::Mos65xx => ArchDetails::Mos65xx(unsafe { &details.arch.mos65xx }),
-//     })
-// }
+    /// Returns architecture specific details.
+    pub fn arch(self) -> ArchDetails<'i> {
+        match self.arch {
+            Arch::Arm => ArchDetails::Arm(unsafe { &self.inner.arch.arm }),
+            Arch::Arm64 => ArchDetails::Arm64(unsafe { &self.inner.arch.arm64 }),
+            Arch::Mips => ArchDetails::Mips(unsafe { &self.inner.arch.mips }),
+            Arch::X86 => ArchDetails::X86(unsafe { &self.inner.arch.x86 }),
+            Arch::PowerPc => ArchDetails::PowerPc(unsafe { &self.inner.arch.ppc }),
+            Arch::Sparc => ArchDetails::Sparc(unsafe { &self.inner.arch.sparc }),
+            Arch::SystemZ => ArchDetails::SystemZ(unsafe { &self.inner.arch.sysz }),
+            Arch::XCore => ArchDetails::XCore(unsafe { &self.inner.arch.xcore }),
+            Arch::M68K => ArchDetails::M68K(unsafe { &self.inner.arch.m68k }),
+            Arch::Tms320C64X => ArchDetails::Tms320C64X(unsafe { &self.inner.arch.tms320c64x }),
+            Arch::M680X => ArchDetails::M680X(unsafe { &self.inner.arch.m680x }),
+            Arch::Evm => ArchDetails::Evm(unsafe { &self.inner.arch.evm }),
+            Arch::Mos65xx => ArchDetails::Mos65xx(unsafe { &self.inner.arch.mos65xx }),
+        }
+    }
+
+    /// If these are details for an x86 instruction, this will return
+    /// x86 specific details. If these are not details for an x86 instruction
+    /// this will return [`Option::None`].
+    pub fn x86(self) -> Option<&'i x86::Details<'i>> {
+        if self.arch == Arch::X86 {
+            Some(unsafe { &self.inner.arch.x86 })
+        } else {
+            None
+        }
+    }
+}
 
 /// Wrapper around cs_detail.
 #[repr(C)]
@@ -295,6 +303,7 @@ pub(crate) union ArchDetailsUnion {
     pub mos65xx: mos65xx::Details<'static>,
 }
 
+#[derive(Copy, Clone)]
 pub enum ArchDetails<'i> {
     X86(&'i x86::Details<'i>),
     Arm64(&'i arm64::Details<'i>),
