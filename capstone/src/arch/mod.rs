@@ -66,20 +66,18 @@ macro_rules! impl_reg_conversions {
             }
         }
 
-        impl core::convert::TryFrom<GenericReg> for $RegType {
-            type Error = ();
-
+        impl core::convert::From<GenericReg> for $RegType {
             #[inline]
-            fn try_from(generic: GenericReg) -> Result<$RegType, Self::Error> {
-                <$RegType>::from_c(generic.0 as libc::c_int).ok_or(())
+            fn from(generic: GenericReg) -> $RegType {
+                <$RegType>::from_c(generic.0 as libc::c_int).unwrap_or(<$RegType>::Invalid)
             }
         }
 
         impl GenericReg {
             /// Convert a generic register to an architecture specific register.
             #[inline]
-            pub fn $Arch(self) -> Option<$RegType> {
-                <$RegType>::from_c(self.0 as libc::c_int)
+            pub fn $Arch(self) -> $RegType {
+                <$RegType>::from_c(self.0 as libc::c_int).unwrap_or(<$RegType>::Invalid)
             }
         }
     };

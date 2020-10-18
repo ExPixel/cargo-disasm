@@ -16,7 +16,7 @@ use core::{convert::From, fmt, ptr::NonNull};
 use std::{self as alloc, cell::RefCell, panic::UnwindSafe};
 
 pub use arch::{GenericReg, InsnId};
-pub use insn::{ArchDetails, Insn, InsnBuffer, InsnIter};
+pub use insn::{ArchDetails, Details, Insn, InsnBuffer, InsnIter};
 
 #[doc(inline)]
 pub use arch::arm;
@@ -94,34 +94,32 @@ impl Capstone {
 
     /// Retrieves some general details about an instruction. This value is
     /// only available if the engine was not compiled in DIET mode and details
-    /// mode is turned on for this instance of Capstone.
-    pub fn insn_details<'i>(&self, insn: &'i Insn) -> Option<&'i insn::Details> {
-        if !self.detail() {
-            return None;
-        }
-        insn.detail.and_then(|v| unsafe { v.as_ptr().as_ref() })
+    /// mode is turned on for this instance of Capstone. If details about an
+    /// instruction are not available, this will **panic**.
+    ///
+    /// # Panics
+    ///
+    /// If instruction details were not turned on for this Capstone instance
+    /// or if Capstone was compiled in DIET mode.
+    pub fn details<'i>(&self, insn: &'i Insn) -> insn::Details<'i> {
+        self.try_details(insn)
+            .expect("instruction details are not available")
     }
 
-    /// Returns architecture specific details about an instruction.
-    /// This value is only available if the engine was not compiled in DIET mode
-    /// and details mode is turned on for this instance of Capstone.
-    pub fn arch_details<'i>(&self, insn: &'i Insn) -> Option<ArchDetails<'i>> {
-        let details = self.insn_details(insn)?;
-        Some(match self.arch() {
-            Arch::Arm => ArchDetails::Arm(unsafe { &details.arch.arm }),
-            Arch::Arm64 => ArchDetails::Arm64(unsafe { &details.arch.arm64 }),
-            Arch::Mips => ArchDetails::Mips(unsafe { &details.arch.mips }),
-            Arch::X86 => ArchDetails::X86(unsafe { &details.arch.x86 }),
-            Arch::PowerPc => ArchDetails::PowerPc(unsafe { &details.arch.ppc }),
-            Arch::Sparc => ArchDetails::Sparc(unsafe { &details.arch.sparc }),
-            Arch::SystemZ => ArchDetails::SystemZ(unsafe { &details.arch.sysz }),
-            Arch::XCore => ArchDetails::XCore(unsafe { &details.arch.xcore }),
-            Arch::M68K => ArchDetails::M68K(unsafe { &details.arch.m68k }),
-            Arch::Tms320C64X => ArchDetails::Tms320C64X(unsafe { &details.arch.tms320c64x }),
-            Arch::M680X => ArchDetails::M680X(unsafe { &details.arch.m680x }),
-            Arch::Evm => ArchDetails::Evm(unsafe { &details.arch.evm }),
-            Arch::Mos65xx => ArchDetails::Mos65xx(unsafe { &details.arch.mos65xx }),
-        })
+    /// Retrieves some general details about an instruction. This value is
+    /// only available if the engine was not compiled in DIET mode and details
+    /// mode is turned on for this instance of Capstone. If details about an
+    /// instruction are not available, this will return [`Option::None`].
+    pub fn try_details<'i>(&self, insn: &'i Insn) -> Option<insn::Details<'i>> {
+        if !self.details_enabled() {
+            return None;
+        }
+
+        unsafe {
+            insn.detail
+                .as_ref()
+                .map(|r| insn::Details::wrap(self.packed.arch(), r))
+        }
     }
 
     /// Reports the last error that occurred in the API after a function
@@ -228,7 +226,7 @@ impl Capstone {
 
     /// Setting `detail` to true will make the disassembling engine break
     /// down instruction structure into details.
-    pub fn set_detail(&mut self, detail: bool) -> Result<(), Error> {
+    pub fn set_details_enabled(&mut self, detail: bool) -> Result<(), Error> {
         self.set_option(
             sys::OptType::Detail,
             if detail {
@@ -453,7 +451,7 @@ impl Capstone {
 
     /// Place the disassembling engine in SKIPDATA mode.
     /// Use [`Capstone::setup_skipdata`] to configure this mode.
-    pub fn set_skipdata(&mut self, skipdata: bool) -> Result<(), Error> {
+    pub fn set_skipdata_mode(&mut self, skipdata: bool) -> Result<(), Error> {
         self.set_option(
             sys::OptType::Skipdata,
             if skipdata {
@@ -467,14 +465,14 @@ impl Capstone {
         Ok(())
     }
 
-    /// Returns true if `detail` is set for the disassembling engine.
-    pub fn detail(&self) -> bool {
+    /// Returns true if this Capstone instance has instruction details enabled.
+    pub fn details_enabled(&self) -> bool {
         self.packed.detail()
     }
 
     /// Returns true if the disassembling engine is currently in SKIPDATA
     /// mode.
-    pub fn skipdata(&self) -> bool {
+    pub fn skipdata_mode(&self) -> bool {
         self.packed.skipdata()
     }
 
@@ -914,10 +912,26 @@ mod test {
 
     #[test]
     fn open_capstone() {
-        let caps = Capstone::open(Arch::X86, Mode::LittleEndian).expect("failed to open capstone");
+        let mut caps =
+            Capstone::open(Arch::X86, Mode::LittleEndian).expect("failed to open capstone");
+        caps.set_details_enabled(true)
+            .expect("failed to enable capstone instruction details");
 
-        for insn in caps.disasm(&[0xcc], 0x0).unwrap().iter() {
-            println!("{} {}", insn.mnemonic(), insn.operands());
+        for insn in caps
+            .disasm(
+                &[
+                    0x8d, 0x4c, 0x32, 0x08, 0x01, 0xd8, 0x81, 0xc6, 0x34, 0x12, 0x00, 0x00, 0x05,
+                    0x23, 0x01, 0x00, 0x00, 0x36, 0x8b, 0x84, 0x91, 0x23, 0x01, 0x00, 0x00, 0x41,
+                    0x8d, 0x84, 0x39, 0x89, 0x67, 0x00, 0x00, 0x8d, 0x87, 0x89, 0x67, 0x00, 0x00,
+                    0xb4, 0xc6, 0xe9, 0xea, 0xbe, 0xad, 0xde, 0xff, 0xa0, 0x23, 0x01, 0x00, 0x00,
+                    0xe8, 0xdf, 0xbe, 0xad, 0xde, 0x74, 0xff,
+                ],
+                0x0,
+            )
+            .unwrap()
+            .iter()
+        {
+            println!("{} {}", insn.mnemonic(), insn.operands(),);
         }
     }
 

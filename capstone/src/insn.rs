@@ -1,9 +1,9 @@
 use crate::arch::{
     arm, arm64, evm, m680x, m68k, mips, mos65xx, ppc, sparc, sysz, tms320c64x, x86, xcore,
+    GenericReg,
 };
-use crate::{sys, util};
+use crate::{sys, util, Arch};
 use core::marker::PhantomData;
-use core::ptr::NonNull;
 
 const MNEMONIC_SIZE: usize = 32;
 
@@ -45,7 +45,7 @@ pub struct Insn<'a> {
     ///
     /// NOTE 2: when in Skipdata mode, or when detail mode is OFF, even if this pointer
     ///     is not NULL, its content is still irrelevant.
-    pub(crate) detail: Option<NonNull<Details>>,
+    pub(crate) detail: *mut DetailsInner,
 
     /// Phantom data to tie the lifetime of the Insn to the Capstone instance.
     _phan: PhantomData<&'a ()>,
@@ -198,9 +198,63 @@ impl<'a> Drop for InsnIter<'a> {
     }
 }
 
+pub struct Details<'c> {
+    arch: Arch,
+    inner: &'c DetailsInner,
+}
+
+impl<'c> Details<'c> {
+    pub(crate) fn wrap(arch: Arch, inner: &'c DetailsInner) -> Details<'c> {
+        Details { arch, inner }
+    }
+
+    /// Returns the architecture that these details are for.
+    pub fn arch(&self) -> Arch {
+        self.arch
+    }
+
+    /// Returns a list of registers read by an instruction.
+    pub fn regs_read(&self) -> &[GenericReg] {
+        unsafe {
+            &*(&self.inner.regs_read[..self.inner.regs_read_count as usize] as *const [u16]
+                as *const [GenericReg])
+        }
+    }
+
+    /// Returns a list of registers written to by this instruction.
+    pub fn regs_write(&self) -> &[GenericReg] {
+        unsafe {
+            &*(&self.inner.regs_write[..self.inner.regs_write_count as usize] as *const [u16]
+                as *const [GenericReg])
+        }
+    }
+}
+
+// /// Returns architecture specific details about an instruction.
+// /// This value is only available if the engine was not compiled in DIET mode
+// /// and details mode is turned on for this instance of Capstone.
+// pub fn arch_details<'i>(&self, insn: &'i Insn) -> Option<ArchDetails<'i>> {
+//     let details = self.insn_details(insn)?;
+//     Some(match self.arch() {
+//         Arch::Arm => ArchDetails::Arm(unsafe { &details.arch.arm }),
+//         Arch::Arm64 => ArchDetails::Arm64(unsafe { &details.arch.arm64 }),
+//         Arch::Mips => ArchDetails::Mips(unsafe { &details.arch.mips }),
+//         Arch::X86 => ArchDetails::X86(unsafe { &details.arch.x86 }),
+//         Arch::PowerPc => ArchDetails::PowerPc(unsafe { &details.arch.ppc }),
+//         Arch::Sparc => ArchDetails::Sparc(unsafe { &details.arch.sparc }),
+//         Arch::SystemZ => ArchDetails::SystemZ(unsafe { &details.arch.sysz }),
+//         Arch::XCore => ArchDetails::XCore(unsafe { &details.arch.xcore }),
+//         Arch::M68K => ArchDetails::M68K(unsafe { &details.arch.m68k }),
+//         Arch::Tms320C64X => ArchDetails::Tms320C64X(unsafe { &details.arch.tms320c64x }),
+//         Arch::M680X => ArchDetails::M680X(unsafe { &details.arch.m680x }),
+//         Arch::Evm => ArchDetails::Evm(unsafe { &details.arch.evm }),
+//         Arch::Mos65xx => ArchDetails::Mos65xx(unsafe { &details.arch.mos65xx }),
+//     })
+// }
+
 /// Wrapper around cs_detail.
 #[repr(C)]
-pub struct Details {
+pub(crate) struct DetailsInner {
     /// List of implicit registers read by this insn.
     regs_read: [u16; 16],
 
@@ -208,7 +262,7 @@ pub struct Details {
     regs_read_count: u8,
 
     /// List of implicit registers modified by this insn.
-    reads_write: [u16; 20],
+    regs_write: [u16; 20],
 
     /// Number of implicit registers modified by this insn.
     regs_write_count: u8,
@@ -264,12 +318,12 @@ mod test {
     #[test]
     fn detail_size_and_alignment() {
         assert_eq!(
-            core::mem::size_of::<Details>(),
+            core::mem::size_of::<DetailsInner>(),
             sys::get_test_val("sizeof(cs_detail)")
         );
 
         assert_eq!(
-            core::mem::align_of::<Details>(),
+            core::mem::align_of::<DetailsInner>(),
             sys::get_test_val("alignof(cs_detail)")
         );
     }
