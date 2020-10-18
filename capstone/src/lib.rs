@@ -19,7 +19,7 @@ use core::{
 #[cfg(feature = "std")]
 use std::{self as alloc, cell::RefCell, panic::UnwindSafe};
 
-pub use arch::InsnId;
+pub use arch::{GenericReg, InsnId};
 pub use insn::{ArchDetails, Insn, InsnBuffer, InsnIter};
 
 #[doc(inline)]

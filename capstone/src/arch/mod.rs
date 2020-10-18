@@ -12,6 +12,8 @@ pub mod tms320c64x;
 pub mod x86;
 pub mod xcore;
 
+use core::cmp::{Eq, PartialEq};
+
 #[derive(Copy, Clone)]
 pub enum InsnId {
     X86(x86::InsnId),
@@ -30,3 +32,11 @@ impl From<x86::InsnId> for InsnId {
         InsnId::X86(id)
     }
 }
+
+/// A generic register that can be compared to any architecture specific register.
+/// This register may be equal to multiple registers from different architectures
+/// but not to multiple registers of the same architecture. This can also be convered
+/// to an architecture specific register for any architecture.
+#[derive(Copy, Clone, PartialEq, Eq, Default, Hash)]
+#[repr(transparent)]
+pub struct GenericReg(u16);
