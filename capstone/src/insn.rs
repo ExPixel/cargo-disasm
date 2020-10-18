@@ -183,7 +183,7 @@ impl<'a> Iterator for InsnIter<'a> {
 
         if !success {
             match self.caps.errno() {
-                Ok(_) => return Some(Err(super::Error::Bindings)),
+                Ok(_) => return None,
                 Err(err) => return Some(Err(err)),
             }
         }
