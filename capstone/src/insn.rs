@@ -198,6 +198,7 @@ impl<'a> Drop for InsnIter<'a> {
     }
 }
 
+#[derive(Copy, Clone)]
 pub struct Details<'c> {
     arch: Arch,
     inner: &'c DetailsInner,
@@ -209,12 +210,12 @@ impl<'c> Details<'c> {
     }
 
     /// Returns the architecture that these details are for.
-    pub fn arch(&self) -> Arch {
+    pub fn arch(self) -> Arch {
         self.arch
     }
 
     /// Returns a list of registers read by an instruction.
-    pub fn regs_read(&self) -> &[GenericReg] {
+    pub fn regs_read(self) -> &'c [GenericReg] {
         unsafe {
             &*(&self.inner.regs_read[..self.inner.regs_read_count as usize] as *const [u16]
                 as *const [GenericReg])
@@ -222,7 +223,7 @@ impl<'c> Details<'c> {
     }
 
     /// Returns a list of registers written to by this instruction.
-    pub fn regs_write(&self) -> &[GenericReg] {
+    pub fn regs_write(self) -> &'c [GenericReg] {
         unsafe {
             &*(&self.inner.regs_write[..self.inner.regs_write_count as usize] as *const [u16]
                 as *const [GenericReg])
