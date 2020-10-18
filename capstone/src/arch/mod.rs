@@ -20,6 +20,7 @@ pub enum InsnId {
 }
 
 impl InsnId {
+    #[inline]
     pub(crate) fn to_c(self) -> libc::c_int {
         match self {
             InsnId::X86(id) => id.to_c(),
@@ -28,6 +29,7 @@ impl InsnId {
 }
 
 impl From<x86::InsnId> for InsnId {
+    #[inline]
     fn from(id: x86::InsnId) -> InsnId {
         InsnId::X86(id)
     }
@@ -40,3 +42,47 @@ impl From<x86::InsnId> for InsnId {
 #[derive(Copy, Clone, PartialEq, Eq, Default, Hash)]
 #[repr(transparent)]
 pub struct GenericReg(u16);
+
+macro_rules! impl_reg_conversions {
+    ($Arch:ident, $RegType:ty) => {
+        impl PartialEq<$RegType> for GenericReg {
+            #[inline]
+            fn eq(&self, other: &$RegType) -> bool {
+                self.0 == other.to_primitive() as u16
+            }
+        }
+
+        impl PartialEq<GenericReg> for $RegType {
+            #[inline]
+            fn eq(&self, other: &GenericReg) -> bool {
+                self.to_primitive() as u16 == other.0
+            }
+        }
+
+        impl core::convert::From<$RegType> for GenericReg {
+            #[inline]
+            fn from(arch_reg: $RegType) -> Self {
+                GenericReg(arch_reg.to_primitive() as u16)
+            }
+        }
+
+        impl core::convert::TryFrom<GenericReg> for $RegType {
+            type Error = ();
+
+            #[inline]
+            fn try_from(generic: GenericReg) -> Result<$RegType, Self::Error> {
+                <$RegType>::from_c(generic.0 as libc::c_int).ok_or(())
+            }
+        }
+
+        impl GenericReg {
+            /// Convert a generic register to an architecture specific register.
+            #[inline]
+            pub fn $Arch(self) -> Option<$RegType> {
+                <$RegType>::from_c(self.0 as libc::c_int)
+            }
+        }
+    };
+}
+
+impl_reg_conversions!(x86, x86::Reg);
