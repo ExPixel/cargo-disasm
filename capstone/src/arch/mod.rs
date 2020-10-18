@@ -19,10 +19,10 @@ pub enum InsnId {
     X86(x86::InsnId),
 }
 
-impl core::convert::From<InsnId> for libc::c_int {
-    fn from(id: InsnId) -> Self {
-        match id {
-            InsnId::X86(id) => id.into(),
+impl InsnId {
+    pub(crate) fn to_c(self) -> libc::c_int {
+        match self {
+            InsnId::X86(id) => id.to_c(),
         }
     }
 }

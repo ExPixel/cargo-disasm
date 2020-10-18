@@ -10,11 +10,7 @@ mod insn;
 mod sys;
 mod util;
 
-use core::{
-    convert::{From, TryFrom},
-    fmt,
-    ptr::NonNull,
-};
+use core::{convert::From, fmt, ptr::NonNull};
 
 #[cfg(feature = "std")]
 use std::{self as alloc, cell::RefCell, panic::UnwindSafe};
@@ -271,7 +267,7 @@ impl Capstone {
     /// Customize the mnemonic for an instruction with an alternative name.
     fn set_mnemonic_inner(&mut self, insn: InsnId, mnemonic: &'static str) -> Result<(), Error> {
         let mut opt_mnem = sys::OptMnemonic {
-            id: insn.into(),
+            id: insn.to_c(),
             mnemonic: mnemonic.as_ptr() as *const libc::c_char,
         };
 
@@ -638,7 +634,7 @@ c_enum! {
 
 impl From<Arch> for sys::Arch {
     fn from(arch: Arch) -> sys::Arch {
-        sys::Arch(arch.into())
+        sys::Arch(arch.to_c())
     }
 }
 
@@ -753,7 +749,7 @@ impl From<Mode> for sys::Mode {
 
 c_enum! {
     #[derive(Clone, Copy, Debug, Hash, PartialEq, Eq)]
-    pub enum Error {
+    pub enum Error: u8 {
         /// Out of memory error.
         Memory = 1,
         /// Unsupported architecture.
@@ -837,15 +833,15 @@ impl PackedCSInfo {
     }
 
     fn arch(self) -> Arch {
-        match Arch::try_from(self.0 & 0xF) {
-            Ok(arch) => arch,
+        match Arch::from_primitive(self.0 & 0xF) {
+            Some(arch) => arch,
 
             #[cfg(test)]
-            Err(_) => unreachable!("bad arch from PackedCSInfo"),
+            None => unreachable!("bad arch from PackedCSInfo"),
 
             // SAFETY: we never allow an invalid Arch to be set on PackedCSInfo.
             #[cfg(not(test))]
-            Err(_) => unsafe { core::hint::unreachable_unchecked() },
+            None => unsafe { core::hint::unreachable_unchecked() },
         }
     }
 
@@ -858,7 +854,7 @@ impl PackedCSInfo {
     }
 
     fn set_arch(&mut self, arch: Arch) {
-        self.0 = (self.0 & !0xF) | u8::from(arch)
+        self.0 = (self.0 & !0xF) | arch.to_primitive()
     }
 
     fn set_detail(&mut self, detail: bool) {

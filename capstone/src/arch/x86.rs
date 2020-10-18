@@ -1,7 +1,5 @@
 use core::marker::PhantomData;
 
-use core::convert::TryFrom;
-
 #[repr(C)]
 #[derive(Clone, Copy)]
 pub struct Details<'c> {
@@ -81,7 +79,7 @@ impl<'c> Details<'c> {
             Prefix::AddrSize => 3,
         };
 
-        self.prefix[idx] == u8::from(prefix)
+        self.prefix[idx] == prefix.to_primitive()
     }
 
     /// Instruction opcode. This value can be from 1 to 4 bytes in size.
@@ -120,7 +118,7 @@ impl<'c> Details<'c> {
 
     /// Returns the SIB index register, or [`Reg::Invalid`] when irrelevant
     pub fn sib_index(&self) -> Reg {
-        Reg::try_from(self.sib_index).unwrap_or(Reg::Invalid)
+        Reg::from_c(self.sib_index).unwrap_or(Reg::Invalid)
     }
 
     /// Returns the SIB scale, only applicable if sib_index is valid.
@@ -130,22 +128,22 @@ impl<'c> Details<'c> {
 
     /// Returns the SIB base register, or [`Reg::Invalid`] when irrelevant.
     pub fn sib_base(&self) -> Reg {
-        Reg::try_from(self.sib_base).unwrap_or(Reg::Invalid)
+        Reg::from_c(self.sib_base).unwrap_or(Reg::Invalid)
     }
 
     /// Returns the XOP condition code.
     pub fn xop_cc(&self) -> XopCC {
-        XopCC::try_from(self.xop_cc).unwrap_or(XopCC::Invalid)
+        XopCC::from_c(self.xop_cc).unwrap_or(XopCC::Invalid)
     }
 
     /// Returns the SSE condition code.
     pub fn sse_cc(&self) -> SseCC {
-        SseCC::try_from(self.sse_cc).unwrap_or(SseCC::Invalid)
+        SseCC::from_c(self.sse_cc).unwrap_or(SseCC::Invalid)
     }
 
     /// Returns the AVX condition code.
     pub fn avx_cc(&self) -> AvxCC {
-        AvxCC::try_from(self.avx_cc).unwrap_or(AvxCC::Invalid)
+        AvxCC::from_c(self.avx_cc).unwrap_or(AvxCC::Invalid)
     }
 
     /// Returns the AVX suppress all exceptions flag.
@@ -155,7 +153,7 @@ impl<'c> Details<'c> {
 
     /// Returns the AVX static rounding mode.
     pub fn avx_rm(&self) -> AvxRm {
-        AvxRm::try_from(self.avx_rm).unwrap_or(AvxRm::Invalid)
+        AvxRm::from_c(self.avx_rm).unwrap_or(AvxRm::Invalid)
     }
 
     /// Returns the number of operands in this instruction, or
@@ -216,14 +214,14 @@ pub struct Op {
 impl Op {
     /// Returns the type of this operand.
     pub fn op_type(&self) -> OpType {
-        OpType::try_from(self.type_).unwrap_or(OpType::Invalid)
+        OpType::from_c(self.type_).unwrap_or(OpType::Invalid)
     }
 
     pub fn value(&self) -> OpValue {
         match self.op_type() {
             OpType::Invalid => OpValue::Imm(0),
             OpType::Reg => {
-                OpValue::Reg(Reg::try_from(unsafe { self.value.reg }).unwrap_or(Reg::Invalid))
+                OpValue::Reg(Reg::from_c(unsafe { self.value.reg }).unwrap_or(Reg::Invalid))
             }
             OpType::Imm => OpValue::Imm(unsafe { self.value.imm }),
             OpType::Mem => OpValue::Mem(unsafe { self.value.mem }),
@@ -297,17 +295,17 @@ pub struct OpMem {
 impl OpMem {
     /// Returns the segment register.
     pub fn segment(&self) -> Reg {
-        Reg::try_from(self.segment).unwrap_or(Reg::Invalid)
+        Reg::from_c(self.segment).unwrap_or(Reg::Invalid)
     }
 
     /// Returns the base register.
     pub fn base(&self) -> Reg {
-        Reg::try_from(self.base).unwrap_or(Reg::Invalid)
+        Reg::from_c(self.base).unwrap_or(Reg::Invalid)
     }
 
     /// Returns the index register.
     pub fn index(&self) -> Reg {
-        Reg::try_from(self.index).unwrap_or(Reg::Invalid)
+        Reg::from_c(self.index).unwrap_or(Reg::Invalid)
     }
 
     /// Returns the scale for the index register.
@@ -362,7 +360,7 @@ c_enum! {
 c_enum! {
     /// Operand type for an x86 instruction's operands.
     #[derive(Copy, Clone, Debug, Hash, PartialEq, Eq)]
-    pub enum OpType {
+    pub enum OpType: u8 {
         /// Uninitialized.
         Invalid = 0,
         /// Register operand.
@@ -377,7 +375,7 @@ c_enum! {
 c_enum! {
     /// XOP Code Condition Type.
     #[derive(Copy, Clone, Debug, Hash, PartialEq, Eq)]
-    pub enum XopCC {
+    pub enum XopCC: u8 {
         /// Uninitialized.
         Invalid = 0,
         Lt,
@@ -394,7 +392,7 @@ c_enum! {
 c_enum! {
     /// AXV broadcast type.
     #[derive(Copy, Clone, Debug, Hash, PartialEq, Eq)]
-    pub enum AvxBroadcast {
+    pub enum AvxBroadcast: u8 {
         Invalid = 0,
         /// AVX 512 broadcast type {1to2}
         To2,
@@ -410,7 +408,7 @@ c_enum! {
 c_enum! {
     /// SSE condition codes.
     #[derive(Copy, Clone, Debug, Hash, PartialEq, Eq)]
-    pub enum SseCC {
+    pub enum SseCC: u8 {
         Invalid = 0,
         Eq,
         Lt,
@@ -426,7 +424,7 @@ c_enum! {
 c_enum! {
     /// AVX condition codes.
     #[derive(Copy, Clone, Debug, Hash, PartialEq, Eq)]
-    pub enum AvxCC {
+    pub enum AvxCC: u8 {
         Invalid = 0,
         Eq,
         Lt,
@@ -466,7 +464,7 @@ c_enum! {
 c_enum! {
     /// AVX rounding modes.
     #[derive(Copy, Clone, Debug, Hash, PartialEq, Eq)]
-    pub enum AvxRm {
+    pub enum AvxRm: u8 {
         Invalid = 0,
         /// Round to nearest.
         Rn,
@@ -605,7 +603,7 @@ union X86OpValue {
 c_enum_big! {
     #[non_exhaustive]
     #[derive(Copy, Clone, PartialEq, Eq)]
-    pub enum Reg {
+    pub enum Reg: u8 {
         @Start = Invalid,
         @End   = Ending,
 
@@ -860,7 +858,7 @@ c_enum_big! {
 c_enum_big! {
     #[non_exhaustive]
     #[derive(Copy, Clone, PartialEq, Eq)]
-    pub enum InsnId {
+    pub enum InsnId: u16 {
         @Start = Invalid,
         @End   = Ending,
 
@@ -2385,7 +2383,7 @@ c_enum_big! {
 c_enum_big! {
     #[non_exhaustive]
     #[derive(Copy, Clone, PartialEq, Eq)]
-    pub enum InsnGroup {
+    pub enum InsnGroup: u8 {
         @Start = Invalid,
         @End   = Ending,
 

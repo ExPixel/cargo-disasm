@@ -3,10 +3,9 @@ macro_rules! result {
         match $error {
             $crate::sys::Error(0) => Ok($good),
 
-            $crate::sys::Error(err) => Err(<$crate::Error as core::convert::TryFrom<
-                libc::c_int,
-            >>::try_from(err)
-            .unwrap_or($crate::Error::Bindings)),
+            $crate::sys::Error(err) => {
+                Err($crate::Error::from_c(err).unwrap_or($crate::Error::Bindings))
+            }
         }
     };
 
@@ -18,7 +17,7 @@ macro_rules! result {
 macro_rules! c_enum {
     (
         $(#[$enum_meta:meta])*
-        $vis:vis enum $EnumName:ident $(: $($Primitive:path),*)? {
+        $vis:vis enum $EnumName:ident: $Primitive:ident {
             $(
                 $(#[$variant_meta:meta])*
                 $Variant:ident $(= $Value:expr)?
@@ -27,7 +26,7 @@ macro_rules! c_enum {
         }
     ) => {
         $(#[$enum_meta])*
-        #[repr(C)]
+        #[repr($Primitive)]
         $vis enum $EnumName {
             $(
                 $(#[$variant_meta])*
@@ -35,52 +34,45 @@ macro_rules! c_enum {
             ),*
         }
 
-        impl core::convert::TryFrom<libc::c_int> for $EnumName {
-            type Error = ();
+        impl $EnumName {
+            /// Converts this enum to its primitive value.
+            #[allow(dead_code)]
+            pub(crate) fn to_primitive(self) -> $Primitive {
+                self as $Primitive
+            }
 
-            fn try_from(primitive: libc::c_int) -> Result<Self, Self::Error> {
+            /// Converts a primitive value to this enum.
+            #[allow(dead_code)]
+            pub(crate) fn from_primitive(primitive: $Primitive) -> Option<Self> {
                 match primitive {
-                    $( _ if primitive == Self::$Variant as libc::c_int => Ok(Self::$Variant) ,)*
-                    _ => Err(()),
+                    $( _ if primitive == Self::$Variant as $Primitive => Some(Self::$Variant) ,)*
+                    _ => None,
+                }
+            }
+
+            /// Converts this to its C value.
+            #[allow(dead_code)]
+            pub(crate) fn to_c(self) -> libc::c_int {
+                self as $Primitive as libc::c_int
+            }
+
+            /// Converts from a C value into this.
+            #[allow(dead_code)]
+            pub(crate) fn from_c(c: libc::c_int) -> Option<Self> {
+                if let Ok(v) = <libc::c_int as core::convert::TryInto<$Primitive>>::try_into(c) {
+                    Self::from_primitive(v)
+                } else {
+                    None
                 }
             }
         }
-
-        impl core::convert::From<$EnumName> for libc::c_int {
-            fn from(e: $EnumName) -> libc::c_int{
-                e as libc::c_int
-            }
-        }
-
-        $($(
-            impl core::convert::From<$EnumName> for $Primitive {
-                fn from(e: $EnumName) -> $Primitive {
-                    e as libc::c_int as $Primitive
-                }
-            }
-
-            impl core::convert::TryFrom<$Primitive> for $EnumName {
-                type Error = ();
-
-                fn try_from(primitive: $Primitive) -> Result<Self, Self::Error> {
-                    // FIXME: while this does guard against possible undefined behavior through bad
-                    // values, as long as the C API does not have a bug it should be fine to
-                    // use an `as libc::c_int` instead. I will leave this here for now though.
-                    if let Ok(p) = <libc::c_int as core::convert::TryFrom<$Primitive>>::try_from(primitive) {
-                        <$EnumName as core::convert::TryFrom<libc::c_int>>::try_from(p)
-                    } else {
-                        Err(())
-                    }
-                }
-            }
-        )*)?
     };
 }
 
 macro_rules! c_enum_big {
     (
         $(#[$enum_meta:meta])*
-        $vis:vis enum $EnumName:ident $(: $($Primitive:path),*)? {
+        $vis:vis enum $EnumName:ident: $Primitive:ident {
             @Start = $StartVariant:ident,
             @End   = $EndVariant:ident,
             $(
@@ -91,7 +83,7 @@ macro_rules! c_enum_big {
         }
     ) => {
         $(#[$enum_meta])*
-        #[repr(C)]
+        #[repr($Primitive)]
         $vis enum $EnumName {
             $(
                 $(#[$variant_meta])*
@@ -99,44 +91,37 @@ macro_rules! c_enum_big {
             ),*
         }
 
-        impl core::convert::TryFrom<libc::c_int> for $EnumName {
-            type Error = ();
+        impl $EnumName {
+            /// Converts this enum to its primitive value.
+            #[allow(dead_code)]
+            pub(crate) fn to_primitive(self) -> $Primitive {
+                self as $Primitive
+            }
 
-            fn try_from(primitive: libc::c_int) -> Result<Self, Self::Error> {
-                if primitive < $EnumName::$StartVariant as libc::c_int || primitive >= $EnumName::$EndVariant as libc::c_int {
-                    return Err(());
+            /// Converts a primitive value to this enum.
+            #[allow(dead_code)]
+            pub(crate) fn from_primitive(primitive: $Primitive) -> Option<Self> {
+                if primitive < $EnumName::$StartVariant as $Primitive || primitive >= $EnumName::$EndVariant as $Primitive {
+                    return None;
                 }
-                Ok(unsafe { core::mem::transmute::<libc::c_int, $EnumName>(primitive) })
+                Some(unsafe { core::mem::transmute::<$Primitive, $EnumName>(primitive) })
+            }
+
+            /// Converts this to its C value.
+            #[allow(dead_code)]
+            pub(crate) fn to_c(self) -> libc::c_int {
+                self as $Primitive as libc::c_int
+            }
+
+            /// Converts from a C value into this.
+            #[allow(dead_code)]
+            pub(crate) fn from_c(c: libc::c_int) -> Option<Self> {
+                if let Ok(v) = <libc::c_int as core::convert::TryInto<$Primitive>>::try_into(c) {
+                    Self::from_primitive(v)
+                } else {
+                    None
+                }
             }
         }
-
-        impl core::convert::From<$EnumName> for libc::c_int {
-            fn from(e: $EnumName) -> libc::c_int {
-                e as libc::c_int
-            }
-        }
-
-        $($(
-            impl core::convert::From<$EnumName> for $Primitive {
-                fn from(e: $EnumName) -> $Primitive {
-                    e as libc::c_int as $Primitive
-                }
-            }
-
-            impl core::convert::TryFrom<$Primitive> for $EnumName {
-                type Error = ();
-
-                fn try_from(primitive: $Primitive) -> Result<Self, Self::Error> {
-                    // FIXME: while this does guard against possible undefined behavior through bad
-                    // values, as long as the C API does not have a bug it should be fine to
-                    // use an `as libc::c_int` instead. I will leave this here for now though.
-                    if let Ok(p) = <libc::c_int as core::convert::TryFrom<$Primitive>>::try_from(primitive) {
-                        <$EnumName as core::convert::TryFrom<libc::c_int>>::try_from(p)
-                    } else {
-                        Err(())
-                    }
-                }
-            }
-        )*)?
     };
 }
