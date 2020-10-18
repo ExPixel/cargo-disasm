@@ -69,6 +69,11 @@ fn main() {
 
     if cfg!(feature = "sys-dyn-mem") {
         build.define("CAPSTONE_USE_SYS_DYN_MEM", None);
+    } else {
+        warn!(
+            "these bindings do not currently have a way of speficying custom allocators, \
+            please enable the `sys-dyn-mem` feature"
+        );
     }
 
     if cfg!(feature = "x86-reduce") {

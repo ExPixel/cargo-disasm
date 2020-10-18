@@ -7,8 +7,12 @@ edition = "2018"
 [features]
 
 default = [
-    "std", "arm", "aarch64", "m68k", "mips", "powerpc", "sparc", "systemz",
-    "x86", "xcore", "tms320c64x", "m680x", "evm", "mos65xx", "sys-dyn-mem"
+    "std", "all-archs", "sys-dyn-mem"
+]
+
+all-archs = [
+    "arm", "aarch64", "m68k", "mips", "powerpc", "sparc", "systemz", "x86",
+    "xcore", "tms320c64x", "m680x", "evm", "mos65xx"
 ]
 
 # This allows the library to use the standard library.
