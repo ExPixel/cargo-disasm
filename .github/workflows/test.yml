@@ -31,6 +31,12 @@ jobs:
       run: cargo build --verbose
     - name: Run tests
       run: cargo test --verbose
+    - name: Run tests (features = alloc + all-archs + sys-dyn-mem)
+      run: cargo test --verbose --no-default-features --features alloc,all-archs,sys-dyn-mem
+      working-directory: ./capstone
+    - name: Run tests (features = all-archs + sys-dyn-mem)
+      run: cargo test --verbose --no-default-features --features all-archs,sys-dyn-mem
+      working-directory: ./capstone
     - name: Clippy Lints
       run: cargo clippy --tests --examples
     - name: Check Formatting
