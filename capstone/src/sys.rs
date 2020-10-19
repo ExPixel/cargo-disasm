@@ -1,3 +1,4 @@
+use crate::insn::Insn;
 use core::ptr::NonNull;
 
 extern "C" {
@@ -7,8 +8,21 @@ extern "C" {
     pub fn cs_close(handle: *mut Handle) -> Error;
     pub fn cs_option(handle: Handle, type_: OptType, value: libc::size_t) -> Error;
     pub fn cs_malloc<'s>(handle: Handle) -> *mut crate::insn::Insn<'s>;
-    pub fn cs_free(insn: *mut crate::insn::Insn, count: libc::size_t);
+    pub fn cs_free(insn: *mut Insn, count: libc::size_t);
     pub fn cs_errno(handle: Handle) -> Error;
+
+    pub fn cs_reg_name(handle: Handle, reg_id: libc::c_uint) -> *const libc::c_char;
+    pub fn cs_insn_name(handle: Handle, insn_id: libc::c_uint) -> *const libc::c_char;
+    pub fn cs_group_name(handle: Handle, group_id: libc::c_uint) -> *const libc::c_char;
+
+    pub fn cs_regs_access(
+        handle: Handle,
+        insn: *const Insn,
+        regs_read: *mut crate::Reg,
+        regs_read_count: *mut u8,
+        regs_write: *mut crate::Reg,
+        regs_write_count: *mut u8,
+    ) -> Error;
 
     pub fn cs_disasm(
         handle: Handle,

@@ -10,39 +10,29 @@ mod insn;
 mod sys;
 mod util;
 
-use core::{convert::From, fmt, ptr::NonNull};
+use core::{convert::From, fmt, marker::PhantomData, ptr::NonNull};
 
 #[cfg(feature = "std")]
 use std::{self as alloc, cell::RefCell, panic::UnwindSafe};
 
-pub use arch::{GenericReg, InsnId};
+#[cfg(feature = "alloc")]
+use alloc::{borrow::Cow, boxed::Box, collections::HashMap};
+
+pub use arch::{InsnGroup, InsnId, Reg};
 pub use insn::{ArchDetails, Details, Insn, InsnBuffer, InsnIter};
 
-#[doc(inline)]
 pub use arch::arm;
-#[doc(inline)]
 pub use arch::arm64;
-#[doc(inline)]
 pub use arch::evm;
-#[doc(inline)]
 pub use arch::m680x;
-#[doc(inline)]
 pub use arch::m68k;
-#[doc(inline)]
 pub use arch::mips;
-#[doc(inline)]
 pub use arch::mos65xx;
-#[doc(inline)]
 pub use arch::ppc;
-#[doc(inline)]
 pub use arch::sparc;
-#[doc(inline)]
 pub use arch::sysz;
-#[doc(inline)]
 pub use arch::tms320c64x;
-#[doc(inline)]
 pub use arch::x86;
-#[doc(inline)]
 pub use arch::xcore;
 
 #[cfg(feature = "std")]
@@ -54,21 +44,30 @@ pub type SkipdataCallback = dyn 'static + FnMut(&[u8], usize) -> usize;
 #[cfg(all(not(feature = "std"), not(feature = "alloc")))]
 pub type SkipdataCallback = fn(&[u8], usize) -> usize;
 
+/// This is just used to make the Capstone instance !Send and !Sync
+struct NotSend(*mut u8);
+
 /// A capstone instance that can be used for disassembly.
 pub struct Capstone {
     handle: sys::Handle,
     packed: PackedCSInfo,
-    #[cfg(feature = "alloc")]
-    skipdata_callback: Option<alloc::boxed::Box<SkipdataCallback>>,
 
     #[cfg(feature = "alloc")]
-    skipdata_mnemonic: Option<alloc::borrow::Cow<'static, str>>,
+    mnemonics: HashMap<InsnId, Cow<'static, str>>,
+
+    #[cfg(feature = "alloc")]
+    skipdata_callback: Option<Box<SkipdataCallback>>,
+
+    #[cfg(feature = "alloc")]
+    skipdata_mnemonic: Option<Cow<'static, str>>,
 
     #[cfg(not(feature = "alloc"))]
     skipdata_callback: Option<SkipdataCallback>,
 
     #[cfg(feature = "std")]
     pending_panic: RefCell<Option<Box<dyn std::any::Any + Send + 'static>>>,
+
+    disable_send: PhantomData<NotSend>,
 }
 
 impl Capstone {
@@ -84,10 +83,15 @@ impl Capstone {
                 skipdata_callback: None,
 
                 #[cfg(feature = "alloc")]
+                mnemonics: HashMap::new(),
+
+                #[cfg(feature = "alloc")]
                 skipdata_mnemonic: None,
 
                 #[cfg(feature = "std")]
                 pending_panic: RefCell::new(None),
+
+                disable_send: PhantomData,
             }
         }
     }
@@ -254,19 +258,54 @@ impl Capstone {
         Ok(())
     }
 
-    /// Customize the mnemonic for an instruction with an alternative name.
-    pub fn set_mnemonic<I>(&mut self, insn: I, mnemonic: &'static str) -> Result<(), Error>
+    /// Removes a custom mnemonic that was previously set by [`Capstone::set_mnemonic`].
+    pub fn reset_mnemonic<I>(&mut self, insn: I) -> Result<(), Error>
     where
         I: Into<InsnId>,
     {
-        self.set_mnemonic_inner(insn.into(), mnemonic)
+        self.set_mnemonic_inner(insn.into(), core::ptr::null())
     }
 
     /// Customize the mnemonic for an instruction with an alternative name.
-    fn set_mnemonic_inner(&mut self, insn: InsnId, mnemonic: &'static str) -> Result<(), Error> {
+    #[cfg(feature = "alloc")]
+    pub fn set_mnemonic<I, M>(&mut self, insn: I, mnemonic: M) -> Result<(), Error>
+    where
+        I: Into<InsnId>,
+        M: Into<Cow<'static, str>>,
+    {
+        let insn = insn.into();
+        let mnemonic = util::ensure_c_string(mnemonic.into());
+        let mnemonic_ptr = mnemonic.as_ptr() as *const libc::c_char; // this is a stable pointer to string data.
+        self.mnemonics.insert(insn, mnemonic);
+
+        self.set_mnemonic_inner(insn, mnemonic_ptr)
+    }
+
+    /// Customize the mnemonic for an instruction with an alternative name.
+    /// `mnemonic` must be a valid C string (must end with the null terminator `\0`).
+    ///
+    /// # Panics
+    /// If `mnemonic` is not a valid C string.
+    #[cfg(not(feature = "alloc"))]
+    pub fn set_mnemonic<I, M>(&mut self, insn: I, mnemonic: &'static str) -> Result<(), Error>
+    where
+        I: Into<InsnId>,
+    {
+        let insn = insn.into();
+        let mnemonic = util::ensure_c_string(mnemonic);
+        let mnemonic_ptr = mnemonic.as_ptr() as *const libc::c_char; // this is a stable pointer to string data.
+        self.set_mnemonic_inner(insn, mnemonic_ptr)
+    }
+
+    /// Customize the mnemonic for an instruction with an alternative name.
+    fn set_mnemonic_inner(
+        &mut self,
+        insn: InsnId,
+        mnemonic: *const libc::c_char,
+    ) -> Result<(), Error> {
         let mut opt_mnem = sys::OptMnemonic {
             id: insn.to_c(),
-            mnemonic: mnemonic.as_ptr() as *const libc::c_char,
+            mnemonic,
         };
 
         self.set_option(
@@ -309,11 +348,11 @@ impl Capstone {
         callback: Option<F>,
     ) -> Result<(), Error>
     where
-        M: Into<alloc::borrow::Cow<'static, str>>,
+        M: Into<Cow<'static, str>>,
         F: 'static + FnMut(&[u8], usize) -> usize,
     {
-        self.skipdata_mnemonic = mnemonic.map(|m| m.into());
-        self.skipdata_callback = callback.map(|c| alloc::boxed::Box::new(c) as _);
+        self.skipdata_mnemonic = mnemonic.map(|m| util::ensure_c_string(m.into()));
+        self.skipdata_callback = callback.map(|c| Box::new(c) as _);
 
         let setup = sys::OptSkipdataSetup {
             mnemonic: self
@@ -365,11 +404,11 @@ impl Capstone {
         callback: Option<F>,
     ) -> Result<(), Error>
     where
-        M: Into<alloc::borrow::Cow<'static, str>>,
+        M: Into<Cow<'static, str>>,
         F: 'static + UnwindSafe + FnMut(&[u8], usize) -> usize,
     {
-        self.skipdata_mnemonic = mnemonic.map(|m| m.into());
-        self.skipdata_callback = callback.map(|c| alloc::boxed::Box::new(c) as _);
+        self.skipdata_mnemonic = mnemonic.map(|m| util::ensure_c_string(m.into()));
+        self.skipdata_callback = callback.map(|c| Box::new(c) as _);
 
         let setup = sys::OptSkipdataSetup {
             mnemonic: self
@@ -400,6 +439,9 @@ impl Capstone {
     ///
     /// # Note
     ///
+    /// `mnemonic` must be a valid C string (it must end with the null terminator `\0`.
+    ///
+    ///
     /// If the callback is `None`, Capstone will skip a number of bytes depending on the
     /// architecture:
     ///
@@ -414,6 +456,9 @@ impl Capstone {
     /// * XCore:   2 bytes.
     /// * EVM:     1 bytes.
     /// * MOS65XX: 1 bytes.
+    ///
+    /// # Panics
+    /// If `mnemonic` is not a valid C string.
     #[cfg(not(feature = "alloc"))]
     pub fn setup_skipdata<M, F>(
         &mut self,
@@ -423,8 +468,10 @@ impl Capstone {
         self.skipdata_callback = callback;
 
         let setup = sys::OptSkipdataSetup {
-            mnemonic: mnemonic
-                .map(|m| unsafe { NonNull::new_unchecked(m.as_ptr() as *mut libc::c_char) }),
+            mnemonic: mnemonic.map(|m| {
+                let m = util::ensure_c_string(m);
+                unsafe { NonNull::new_unchecked(m.as_ptr() as *mut libc::c_char) }
+            }),
             callback: self.skipdata_callback.as_ref().map(|_| cs_skipdata_cb as _),
             userdata: self as *mut Self as *mut libc::c_void,
         };
@@ -480,6 +527,38 @@ impl Capstone {
     /// disassembly engine is set to disassemble.
     pub fn arch(&self) -> Arch {
         self.packed.arch()
+    }
+
+    /// Returns the user friendly name of a register. This will return an empty string
+    /// if the register is not valid for the current architecture.
+    pub fn reg_name<R>(&self, reg: R) -> &str
+    where
+        R: Into<Reg>,
+    {
+        let reg = reg.into();
+        let name = unsafe { sys::cs_reg_name(self.handle, reg.to_primitive() as _) };
+
+        if name.is_null() {
+            ""
+        } else {
+            unsafe { util::cstr(name, 128) }
+        }
+    }
+
+    /// Retrieves all of the registers read from and written to either
+    /// implicitly or explicitly by an instruction and places them into
+    /// the given buffer.
+    pub fn regs_used(&self, insn: &Insn, regs_used_out: &mut RegsUsed) -> Result<(), Error> {
+        result!(unsafe {
+            sys::cs_regs_access(
+                self.handle,
+                insn,
+                regs_used_out.read.1.as_mut_ptr(),
+                &mut regs_used_out.read.0,
+                regs_used_out.write.1.as_mut_ptr(),
+                &mut regs_used_out.write.0,
+            )
+        })
     }
 
     /// Set an option for the disassembling engine at runtime.
@@ -560,6 +639,47 @@ extern "C" fn cs_skipdata_cb(
             // This should be unreachable.
             0
         }
+    }
+}
+
+#[cfg(feature = "alloc")]
+#[derive(Clone, Copy, Default)]
+pub struct RegsUsed {
+    read: RegsBuffer,
+    write: RegsBuffer,
+}
+
+impl RegsUsed {
+    pub fn read(&self) -> &[Reg] {
+        &self.read
+    }
+
+    pub fn write(&self) -> &[Reg] {
+        &self.write
+    }
+}
+
+/// A list of registers that are either read from or written to by an instruction.
+#[derive(Clone, Copy)]
+pub struct RegsBuffer(u8, [Reg; 64]);
+
+impl RegsBuffer {
+    pub fn new() -> RegsBuffer {
+        RegsBuffer(0, [Reg::default(); 64])
+    }
+}
+
+impl Default for RegsBuffer {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
+impl core::ops::Deref for RegsBuffer {
+    type Target = [Reg];
+
+    fn deref(&self) -> &Self::Target {
+        &self.1[..self.0 as usize]
     }
 }
 
@@ -916,6 +1036,11 @@ mod test {
             Capstone::open(Arch::X86, Mode::LittleEndian).expect("failed to open capstone");
         caps.set_details_enabled(true)
             .expect("failed to enable capstone instruction details");
+        caps.set_mnemonic(x86::InsnId::Add, "better-add")
+            .expect("failed to substitute instruction mnemonic");
+
+        println!("capstone size: {} bytes", core::mem::size_of::<Capstone>());
+        let mut regs_used = RegsUsed::default();
 
         for insn in caps.disasm_iter(
             &[
@@ -929,19 +1054,15 @@ mod test {
         ) {
             let insn = insn.unwrap();
             println!("{} {}", insn.mnemonic(), insn.operands());
+            caps.regs_used(insn, &mut regs_used)
+                .expect("failed to get registers accessed");
 
-            for operand in caps.details(insn).x86().unwrap().operands() {
-                if let x86::OpValue::Reg(x86::Reg::Eax) = operand.value() {
-                    println!("\taccesses EAX");
-                }
+            for reg in regs_used.read().iter() {
+                println!("\t read reg {}", caps.reg_name(*reg));
+            }
 
-                if let x86::OpValue::Reg(x86::Reg::Ebx) = operand.value() {
-                    println!("\taccesses EBX");
-                }
-
-                if let x86::OpValue::Reg(x86::Reg::Ecx) = operand.value() {
-                    println!("\taccesses ECX");
-                }
+            for reg in regs_used.write().iter() {
+                println!("\twrite reg {}", caps.reg_name(*reg));
             }
         }
     }

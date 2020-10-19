@@ -5,11 +5,11 @@ use core::marker::PhantomData;
 pub struct Details<'c> {
     /// Instruction prefix, which can be up to 4 bytes.
     /// A prefix byte gets value 0 when irrelevant.
-    /// prefix[0] indicates REP/REPNE/LOCK prefix (See X86_PREFIX_REP/REPNE/LOCK above)
-    /// prefix[1] indicates segment override (irrelevant for x86_64):
+    /// prefix\[0\] indicates REP/REPNE/LOCK prefix (See X86_PREFIX_REP/REPNE/LOCK above)
+    /// prefix\[1\] indicates segment override (irrelevant for x86_64):
     /// See X86_PREFIX_CS/SS/DS/ES/FS/GS above.
-    /// prefix[2] indicates operand-size override (X86_PREFIX_OPSIZE)
-    /// prefix[3] indicates address-size override (X86_PREFIX_ADDRSIZE)
+    /// prefix\[2\] indicates operand-size override (X86_PREFIX_OPSIZE)
+    /// prefix\[3\] indicates address-size override (X86_PREFIX_ADDRSIZE)
     prefix: [u8; 4],
 
     /// Instruction opcode, which can be from 1 to 4 bytes in size.
@@ -20,7 +20,7 @@ pub struct Details<'c> {
     /// REX prefix: only a non-zero value is relevant for x86_64
     rex: u8,
 
-    /// Address size, which can be overridden with above prefix[5].
+    /// Address size, which can be overridden with above prefix\[5\].
     addr_size: u8,
 
     /// ModR/M byte
@@ -202,7 +202,7 @@ pub struct Op {
     /// How this operand is accessed. (READ, WRITE, READ | WRITE)
     /// This field is a combination of cs_ac_type.
     /// NOTE: this field is irrelevant if the engine is compiled in DIET mode.
-    access: u8,
+    access: super::Access,
 
     /// AVX broadcast type, or 0 if irrelevant.
     avx_bcast: X86AvxBCast,
@@ -217,6 +217,7 @@ impl Op {
         OpType::from_c(self.type_).unwrap_or(OpType::Invalid)
     }
 
+    /// Returns the value of this operand.
     pub fn value(&self) -> OpValue {
         match self.op_type() {
             OpType::Invalid => OpValue::Imm(0),
@@ -226,6 +227,26 @@ impl Op {
             OpType::Imm => OpValue::Imm(unsafe { self.value.imm }),
             OpType::Mem => OpValue::Mem(unsafe { self.value.mem }),
         }
+    }
+
+    /// Returns the size of this operand in bytes.
+    pub fn size(&self) -> usize {
+        self.size as usize
+    }
+
+    /// Returns how this operand was accessed.
+    pub fn access(&self) -> super::Access {
+        self.access
+    }
+
+    /// Returns AVX broadcast type, or [`AvxBroadcast::Invalid`] if irrelevant.
+    pub fn avx_bcast(&self) -> AvxBroadcast {
+        AvxBroadcast::from_c(self.avx_bcast).unwrap_or(AvxBroadcast::Invalid)
+    }
+
+    /// Returns the AVX zero opmask {Z}
+    pub fn avx_zero_opmask(&self) -> bool {
+        self.avx_zero_opmask
     }
 }
 
@@ -602,7 +623,7 @@ union X86OpValue {
 
 c_enum_big! {
     #[non_exhaustive]
-    #[derive(Copy, Clone, PartialEq, Eq)]
+    #[derive(Copy, Clone, PartialEq, Eq, Hash)]
     pub enum Reg: u8 {
         @Start = Invalid,
         @End   = Ending,
@@ -857,7 +878,7 @@ c_enum_big! {
 
 c_enum_big! {
     #[non_exhaustive]
-    #[derive(Copy, Clone, PartialEq, Eq)]
+    #[derive(Copy, Clone, PartialEq, Eq, Hash)]
     pub enum InsnId: u16 {
         @Start = Invalid,
         @End   = Ending,
@@ -2382,7 +2403,7 @@ c_enum_big! {
 
 c_enum_big! {
     #[non_exhaustive]
-    #[derive(Copy, Clone, PartialEq, Eq)]
+    #[derive(Copy, Clone, PartialEq, Eq, Hash)]
     pub enum InsnGroup: u8 {
         @Start = Invalid,
         @End   = Ending,

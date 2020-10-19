@@ -1,6 +1,5 @@
 use crate::arch::{
-    arm, arm64, evm, m680x, m68k, mips, mos65xx, ppc, sparc, sysz, tms320c64x, x86, xcore,
-    GenericReg,
+    arm, arm64, evm, m680x, m68k, mips, mos65xx, ppc, sparc, sysz, tms320c64x, x86, xcore, Reg,
 };
 use crate::{sys, util, Arch};
 use core::marker::PhantomData;
@@ -11,7 +10,7 @@ const MNEMONIC_SIZE: usize = 32;
 #[repr(C)]
 pub struct Insn<'a> {
     /// Instruction ID (basically a numeric ID for the instruction mnemonic)
-    /// Find the instruction id in the '[ARCH]_insn' enum in the header file
+    /// Find the instruction id in the '\[ARCH\]_insn' enum in the header file
     /// of corresponding architecture, such as 'arm_insn' in arm.h for ARM,
     /// 'x86_insn' in x86.h for X86, etc...
     /// This information is available even when CS_OPT_DETAIL = CS_OPT_OFF
@@ -128,6 +127,8 @@ impl<'a> Drop for InsnBuffer<'a> {
     }
 }
 
+/// Iterator that lazily disassembles a binary blob of machine code.
+/// This is constructed using [`crate::Capstone::disasm_iter`].
 pub struct InsnIter<'a> {
     caps: &'a super::Capstone,
     insn: *mut Insn<'a>,
@@ -213,20 +214,20 @@ impl<'i> Details<'i> {
     /// Returns a list of registers that are **implicitly** read from by an instruction.
     /// For explicitly read registers, use the architecture specific details to access
     /// the operands of the instruction.
-    pub fn regs_read(self) -> &'i [GenericReg] {
+    pub fn regs_read(self) -> &'i [Reg] {
         unsafe {
             &*(&self.inner.regs_read[..self.inner.regs_read_count as usize] as *const [u16]
-                as *const [GenericReg])
+                as *const [Reg])
         }
     }
 
     /// Returns a list of registers that are **implicitly** written to by this instruction.
     /// For registers that are explicitly written to, use the architecture specific details
     /// to access the operands of the instruction.
-    pub fn regs_write(self) -> &'i [GenericReg] {
+    pub fn regs_write(self) -> &'i [Reg] {
         unsafe {
             &*(&self.inner.regs_write[..self.inner.regs_write_count as usize] as *const [u16]
-                as *const [GenericReg])
+                as *const [Reg])
         }
     }
 
