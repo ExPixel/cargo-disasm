@@ -1,67 +1,10 @@
+use super::generated::{cs_x86, cs_x86_encoding, cs_x86_op, x86_op_mem};
 use core::marker::PhantomData;
 
-#[repr(C)]
+#[repr(transparent)]
 #[derive(Clone, Copy)]
 pub struct Details<'c> {
-    /// Instruction prefix, which can be up to 4 bytes.
-    /// A prefix byte gets value 0 when irrelevant.
-    /// prefix\[0\] indicates REP/REPNE/LOCK prefix (See X86_PREFIX_REP/REPNE/LOCK above)
-    /// prefix\[1\] indicates segment override (irrelevant for x86_64):
-    /// See X86_PREFIX_CS/SS/DS/ES/FS/GS above.
-    /// prefix\[2\] indicates operand-size override (X86_PREFIX_OPSIZE)
-    /// prefix\[3\] indicates address-size override (X86_PREFIX_ADDRSIZE)
-    prefix: [u8; 4],
-
-    /// Instruction opcode, which can be from 1 to 4 bytes in size.
-    /// This contains VEX opcode as well.
-    /// An trailing opcode byte gets value 0 when irrelevant.
-    opcode: [u8; 4],
-
-    /// REX prefix: only a non-zero value is relevant for x86_64
-    rex: u8,
-
-    /// Address size, which can be overridden with above prefix\[5\].
-    addr_size: u8,
-
-    /// ModR/M byte
-    modrm: u8,
-
-    /// SIB value, or 0 when irrelevant.
-    sib: u8,
-
-    /// Displacement value, valid if encoding.disp_offset != 0
-    disp: i64,
-
-    /// SIB index register, or X86_REG_INVALID when irrelevant.
-    sib_index: X86Reg,
-    /// SIB scale, only applicable if sib_index is valid.
-    sib_scale: i8,
-    /// SIB base register, or X86_REG_INVALID when irrelevant.
-    sib_base: X86Reg,
-
-    /// XOP Code Condition
-    xop_cc: X86XopCC,
-    /// SSE Code Condition
-    sse_cc: X86SseCC,
-    /// AVX Code Condition
-    avx_cc: X86AvxCC,
-
-    /// AVX suppress all exceptions
-    avx_sae: bool,
-    /// AVX static rounding mode
-    avx_rm: X86AvxRm,
-
-    eflags_or_fpu_flags: X86EFlagsOrFpuFlags,
-
-    /// Number of operands of this instruction,
-    /// or 0 when instruction has no operands.
-    op_count: u8,
-
-    /// Operands for this instruction.
-    operands: [Op; 8],
-
-    /// Encoding information
-    encoding: Encoding,
+    inner: cs_x86,
     _phantom: PhantomData<&'c ()>,
 }
 
@@ -79,174 +22,166 @@ impl<'c> Details<'c> {
             Prefix::AddrSize => 3,
         };
 
-        self.prefix[idx] == prefix.to_primitive()
+        self.inner.prefix[idx] == prefix.to_primitive()
     }
 
     /// Instruction opcode. This value can be from 1 to 4 bytes in size.
     /// This will contain the VEX opcode as well.
     pub fn opcode(&self) -> &[u8] {
-        let len = self.opcode.iter().position(|&b| b == 0).unwrap_or(0);
-        &self.opcode[..len]
+        let len = self.inner.opcode.iter().position(|&b| b == 0).unwrap_or(0);
+        &self.inner.opcode[..len]
     }
 
     /// Returns the REX prefix byte. This value is only relevant
     /// for x86_64 and only if it is non-zero.
     pub fn rex(&self) -> u8 {
-        self.rex
+        self.inner.rex
     }
 
     /// Address size. This can be overriden by the [`Prefix::AddrSize`] prefix.
     pub fn addr_size(&self) -> u8 {
-        self.addr_size
+        self.inner.addr_size
     }
 
     /// Returns the ModR/M byte.
     pub fn modrm(&self) -> u8 {
-        self.modrm
+        self.inner.modrm
     }
 
     /// Returns the SIB value. This will be zero if it is not relevant.
     pub fn sib(&self) -> u8 {
-        self.sib
+        self.inner.sib
     }
 
     /// Returns the displacement value. This is only valid if the value returned by [`Encoding::disp_offset`]
     /// which can be retrieved via [`Details::encoding`] is a non-zero value.
     pub fn disp(&self) -> i64 {
-        self.disp
+        self.inner.disp
     }
 
     /// Returns the SIB index register, or [`Reg::Invalid`] when irrelevant
     pub fn sib_index(&self) -> Reg {
-        Reg::from_c(self.sib_index).unwrap_or(Reg::Invalid)
+        Reg::from_c(self.inner.sib_index).unwrap_or(Reg::Invalid)
     }
 
     /// Returns the SIB scale, only applicable if sib_index is valid.
     pub fn sib_scale(&self) -> i8 {
-        self.sib_scale
+        self.inner.sib_scale
     }
 
     /// Returns the SIB base register, or [`Reg::Invalid`] when irrelevant.
     pub fn sib_base(&self) -> Reg {
-        Reg::from_c(self.sib_base).unwrap_or(Reg::Invalid)
+        Reg::from_c(self.inner.sib_base).unwrap_or(Reg::Invalid)
     }
 
     /// Returns the XOP condition code.
     pub fn xop_cc(&self) -> XopCC {
-        XopCC::from_c(self.xop_cc).unwrap_or(XopCC::Invalid)
+        XopCC::from_c(self.inner.xop_cc).unwrap_or(XopCC::Invalid)
     }
 
     /// Returns the SSE condition code.
     pub fn sse_cc(&self) -> SseCC {
-        SseCC::from_c(self.sse_cc).unwrap_or(SseCC::Invalid)
+        SseCC::from_c(self.inner.sse_cc).unwrap_or(SseCC::Invalid)
     }
 
     /// Returns the AVX condition code.
     pub fn avx_cc(&self) -> AvxCC {
-        AvxCC::from_c(self.avx_cc).unwrap_or(AvxCC::Invalid)
+        AvxCC::from_c(self.inner.avx_cc).unwrap_or(AvxCC::Invalid)
     }
 
     /// Returns the AVX suppress all exceptions flag.
     pub fn avx_sae(&self) -> bool {
-        self.avx_sae
+        self.inner.avx_sae
     }
 
     /// Returns the AVX static rounding mode.
     pub fn avx_rm(&self) -> AvxRm {
-        AvxRm::from_c(self.avx_rm).unwrap_or(AvxRm::Invalid)
+        AvxRm::from_c(self.inner.avx_rm).unwrap_or(AvxRm::Invalid)
     }
 
     /// Returns the number of operands in this instruction, or
     /// zero when this instruction has no operands. This value will
     /// be the same as the length of the slice returned by [`Details::operands`].
     pub fn op_count(&self) -> usize {
-        self.op_count as usize
+        self.inner.op_count as usize
     }
 
     /// Returns the operands contained in this instruction. The length
     /// of the returned slice will be the same as teh value returned
     /// by [`Details::op_count`].
     pub fn operands(&self) -> &[Op] {
-        &self.operands[..self.op_count as usize]
+        unsafe {
+            &*(&self.inner.operands[..self.inner.op_count as usize] as *const [cs_x86_op]
+                as *const [Op])
+        }
     }
 
     /// Returns encoding information about this instruction.
     pub fn encoding(&self) -> &Encoding {
-        &self.encoding
+        unsafe { &*(&self.inner.encoding as *const cs_x86_encoding as *const Encoding) }
     }
 
     /// Returns the eflags updated by this instruction.
     /// This should not be called if the instruction is an FPU instruction,
     /// the return value will be undefined.
     pub fn eflags(&self) -> EFlags {
-        EFlags::from_bits_truncate(unsafe { self.eflags_or_fpu_flags.eflags })
+        EFlags::from_bits_truncate(unsafe { self.inner.__bindgen_anon_1.eflags })
     }
 
     /// Returns the FPU flags updated by this instruction.
     /// This should only be called if the instruction is
     /// in the FPU group, the return value will be undefined.
     pub fn fpu_flags(&self) -> FpuFlags {
-        FpuFlags::from_bits_truncate(unsafe { self.eflags_or_fpu_flags.fpu_flags })
+        FpuFlags::from_bits_truncate(unsafe { self.inner.__bindgen_anon_1.fpu_flags })
     }
 }
 
-#[repr(C)]
+#[repr(transparent)]
 #[derive(Clone, Copy)]
 pub struct Op {
-    type_: X86OpType,
-    value: X86OpValue,
-
-    /// Size of this operand (in bytes).
-    size: u8,
-
-    /// How this operand is accessed. (READ, WRITE, READ | WRITE)
-    /// This field is a combination of cs_ac_type.
-    /// NOTE: this field is irrelevant if the engine is compiled in DIET mode.
-    access: super::Access,
-
-    /// AVX broadcast type, or 0 if irrelevant.
-    avx_bcast: X86AvxBCast,
-
-    /// AVX zero opmask {Z}
-    avx_zero_opmask: bool,
+    inner: cs_x86_op,
 }
 
 impl Op {
     /// Returns the type of this operand.
     pub fn op_type(&self) -> OpType {
-        OpType::from_c(self.type_).unwrap_or(OpType::Invalid)
+        OpType::from_c(self.inner.type_).unwrap_or(OpType::Invalid)
     }
 
     /// Returns the value of this operand.
     pub fn value(&self) -> OpValue {
         match self.op_type() {
             OpType::Invalid => OpValue::Imm(0),
-            OpType::Reg => {
-                OpValue::Reg(Reg::from_c(unsafe { self.value.reg }).unwrap_or(Reg::Invalid))
-            }
-            OpType::Imm => OpValue::Imm(unsafe { self.value.imm }),
-            OpType::Mem => OpValue::Mem(unsafe { self.value.mem }),
+            OpType::Reg => OpValue::Reg(
+                Reg::from_c(unsafe { self.inner.__bindgen_anon_1.reg }).unwrap_or(Reg::Invalid),
+            ),
+            OpType::Imm => OpValue::Imm(unsafe { self.inner.__bindgen_anon_1.imm }),
+            OpType::Mem => OpValue::Mem(unsafe {
+                OpMem {
+                    inner: self.inner.__bindgen_anon_1.mem,
+                }
+            }),
         }
     }
 
     /// Returns the size of this operand in bytes.
     pub fn size(&self) -> usize {
-        self.size as usize
+        self.inner.size as usize
     }
 
     /// Returns how this operand was accessed.
     pub fn access(&self) -> super::Access {
-        self.access
+        super::Access::from_bits_truncate(self.inner.access)
     }
 
     /// Returns AVX broadcast type, or [`AvxBroadcast::Invalid`] if irrelevant.
     pub fn avx_bcast(&self) -> AvxBroadcast {
-        AvxBroadcast::from_c(self.avx_bcast).unwrap_or(AvxBroadcast::Invalid)
+        AvxBroadcast::from_c(self.inner.avx_bcast).unwrap_or(AvxBroadcast::Invalid)
     }
 
     /// Returns the AVX zero opmask {Z}
     pub fn avx_zero_opmask(&self) -> bool {
-        self.avx_zero_opmask
+        self.inner.avx_zero_opmask
     }
 }
 
@@ -256,87 +191,69 @@ pub enum OpValue {
     Mem(OpMem),
 }
 
-#[repr(C)]
+#[repr(transparent)]
 #[derive(Clone, Copy)]
 pub struct Encoding {
-    /// ModR/M offset, or 0 when irrelevant.
-    modrm_offset: u8,
-
-    /// Displacement offset, or 0 when irrelevant.
-    disp_offset: u8,
-    disp_size: u8,
-
-    /// Immediate offset, or 0 when irrelevant.
-    imm_offset: u8,
-    imm_size: u8,
+    inner: cs_x86_encoding,
 }
 
 impl Encoding {
     /// Returns the ModR/M offset, or 0 when irrelevant.
     pub fn modrm_offset(&self) -> u8 {
-        self.modrm_offset
+        self.inner.modrm_offset
     }
 
     /// Returns the displacement offset, or 0 when irrelevant.
     pub fn disp_offset(&self) -> u8 {
-        self.disp_offset
+        self.inner.disp_offset
     }
 
     /// Returns the displacement size.
     pub fn disp_size(&self) -> u8 {
-        self.disp_size
+        self.inner.disp_size
     }
 
     /// Returns the immediate offset, or 0 when irrelevant.
     pub fn imm_offset(&self) -> u8 {
-        self.imm_offset
+        self.inner.imm_offset
     }
 
     /// Returns the immediate size.
     pub fn imm_size(&self) -> u8 {
-        self.imm_size
+        self.inner.imm_size
     }
 }
 
 #[repr(C)]
 #[derive(Clone, Copy)]
 pub struct OpMem {
-    /// Segment register
-    segment: X86Reg,
-    /// Base register
-    base: X86Reg,
-    /// Index register
-    index: X86Reg,
-    /// Scale for index register
-    scale: libc::c_int,
-    /// Displacement value
-    disp: i64,
+    inner: x86_op_mem,
 }
 
 impl OpMem {
     /// Returns the segment register.
     pub fn segment(&self) -> Reg {
-        Reg::from_c(self.segment).unwrap_or(Reg::Invalid)
+        Reg::from_c(self.inner.segment).unwrap_or(Reg::Invalid)
     }
 
     /// Returns the base register.
     pub fn base(&self) -> Reg {
-        Reg::from_c(self.base).unwrap_or(Reg::Invalid)
+        Reg::from_c(self.inner.base).unwrap_or(Reg::Invalid)
     }
 
     /// Returns the index register.
     pub fn index(&self) -> Reg {
-        Reg::from_c(self.index).unwrap_or(Reg::Invalid)
+        Reg::from_c(self.inner.index).unwrap_or(Reg::Invalid)
     }
 
     /// Returns the scale for the index register.
     pub fn scale(&self) -> i32 {
-        self.scale as i32
+        self.inner.scale as i32
     }
 
     /// Returns the displacement value.
     pub fn disp(&self) -> i64 {
-        self.disp
+        self.inner.disp
     }
 }
 
@@ -587,21 +504,6 @@ bitflags::bitflags! {
     }
 }
 
-/// x86_reg
-type X86Reg = libc::c_int;
-/// x86_xop_cc
-type X86XopCC = libc::c_int;
-/// x86_sse_cc
-type X86SseCC = libc::c_int;
-/// x86_avc_cc
-type X86AvxCC = libc::c_int;
-/// x86_avx_rm
-type X86AvxRm = libc::c_int;
-/// x86_op_type
-type X86OpType = libc::c_int;
-/// x86_avx_bast
-type X86AvxBCast = libc::c_int;
-
 #[repr(C)]
 #[derive(Clone, Copy)]
 union X86EFlagsOrFpuFlags {
@@ -611,14 +513,6 @@ union X86EFlagsOrFpuFlags {
     /// FPU_FLAGS updated by an instruction.
     /// This can be formed from an OR combination of X86_FPU_FLAGS_*
     fpu_flags: u64,
-}
-
-#[repr(C)]
-#[derive(Clone, Copy)]
-union X86OpValue {
-    reg: X86Reg,
-    imm: i64,
-    mem: OpMem,
 }
 
 c_enum_big! {
@@ -2490,6 +2384,19 @@ mod test {
         assert_eq!(
             core::mem::align_of::<Details>(),
             sys::get_test_val("alignof(cs_x86)")
+        );
+    }
+
+    #[test]
+    fn x86_enum_size() {
+        assert_eq!(Reg::Ending.to_c(), sys::get_test_val("X86_REG_ENDING") as _);
+        assert_eq!(
+            InsnId::Ending.to_c(),
+            sys::get_test_val("X86_INS_ENDING") as _
+        );
+        assert_eq!(
+            InsnGroup::Ending.to_c(),
+            sys::get_test_val("X86_GRP_ENDING") as _
         );
     }
 }

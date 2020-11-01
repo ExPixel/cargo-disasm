@@ -1,5 +1,6 @@
 use crate::arch::{
-    arm, arm64, evm, m680x, m68k, mips, mos65xx, ppc, sparc, sysz, tms320c64x, x86, xcore, Reg,
+    arm, arm64, evm, m680x, m68k, mips, mos65xx, ppc, sparc, sysz, tms320c64x, x86, xcore,
+    InsnGroup, Reg,
 };
 use crate::{sys, util, Arch};
 use core::marker::PhantomData;
@@ -228,6 +229,13 @@ impl<'i> Details<'i> {
         unsafe {
             &*(&self.inner.regs_write[..self.inner.regs_write_count as usize] as *const [u16]
                 as *const [Reg])
+        }
+    }
+
+    pub fn groups(self) -> &'i [InsnGroup] {
+        unsafe {
+            &*(&self.inner.groups[..self.inner.groups_count as usize] as *const [u8]
+                as *const [InsnGroup])
         }
     }
 

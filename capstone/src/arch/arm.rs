@@ -1,9 +1,11 @@
+use super::generated::cs_arm;
 use core::marker::PhantomData;
 
-#[repr(C)]
+#[repr(transparent)]
 #[derive(Clone, Copy)]
 pub struct Details<'c> {
-    placeholder: [u8; 1768],
+    #[allow(dead_code)]
+    inner: cs_arm,
     _phantom: PhantomData<&'c ()>,
 }
 

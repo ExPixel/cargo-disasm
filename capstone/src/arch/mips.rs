@@ -1,9 +1,11 @@
+use super::generated::cs_mips;
 use core::marker::PhantomData;
 
-#[repr(C)]
+#[repr(transparent)]
 #[derive(Clone, Copy)]
 pub struct Details<'c> {
-    x: u32,
+    #[allow(dead_code)]
+    inner: cs_mips,
     _phantom: PhantomData<&'c ()>,
 }
 

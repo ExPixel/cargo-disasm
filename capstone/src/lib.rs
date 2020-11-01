@@ -545,6 +545,38 @@ impl Capstone {
         }
     }
 
+    /// Returns the user friendly name of an instruction. This will return an empty string
+    /// if the instruction is not valid for the current architecture.
+    pub fn insn_name<I>(&self, insn: I) -> &str
+    where
+        I: Into<InsnId>,
+    {
+        let insn = insn.into();
+        let name = unsafe { sys::cs_insn_name(self.handle, insn.to_c() as _) };
+
+        if name.is_null() {
+            ""
+        } else {
+            unsafe { util::cstr(name, 128) }
+        }
+    }
+
+    /// Returns the user friendly name of an instruction group. This will return an empty string
+    /// if the instruction group is not valid for the current architecture.
+    pub fn group_name<G>(&self, group: G) -> &str
+    where
+        G: Into<InsnGroup>,
+    {
+        let group = group.into();
+        let name = unsafe { sys::cs_group_name(self.handle, group.to_primitive() as _) };
+
+        if name.is_null() {
+            ""
+        } else {
+            unsafe { util::cstr(name, 128) }
+        }
+    }
+
     /// Retrieves all of the registers read from and written to either
     /// implicitly or explicitly by an instruction and places them into
     /// the given buffer.
@@ -1063,6 +1095,11 @@ mod test {
 
             for reg in regs_used.write().iter() {
                 println!("\twrite reg {}", caps.reg_name(*reg));
+            }
+
+            println!("GROUPS:");
+            for grp in caps.details(insn).groups() {
+                println!("\t- {}", caps.group_name(*grp));
             }
         }
     }

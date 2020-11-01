@@ -1,3 +1,6 @@
+#[allow(dead_code, non_camel_case_types, non_snake_case)]
+pub(crate) mod generated;
+
 pub mod arm;
 pub mod arm64;
 pub mod evm;
@@ -46,10 +49,11 @@ impl InsnId {
 /// into an architecture specific group for any architecture.
 #[derive(Copy, Clone, PartialEq, Eq, Default, Hash)]
 #[repr(transparent)]
-pub struct InsnGroup(u16);
+pub struct InsnGroup(u8);
 
 impl InsnGroup {
-    pub(crate) fn to_primitive(self) -> u16 {
+    #[allow(dead_code)]
+    pub(crate) fn to_primitive(self) -> u8 {
         self.0
     }
 }
@@ -87,21 +91,21 @@ macro_rules! impl_arch {
         impl PartialEq<$ArchModuleName::InsnGroup> for InsnGroup {
             #[inline]
             fn eq(&self, other: &$ArchModuleName::InsnGroup) -> bool {
-                self.0 == other.to_primitive() as u16
+                self.0 == other.to_primitive() as u8
             }
         }
 
         impl PartialEq<InsnGroup> for $ArchModuleName::InsnGroup {
             #[inline]
             fn eq(&self, other: &InsnGroup) -> bool {
-                self.to_primitive() as u16 == other.0
+                self.to_primitive() as u8 == other.0
             }
         }
 
         impl core::convert::From<$ArchModuleName::InsnGroup> for InsnGroup {
             #[inline]
             fn from(arch_insn_group: $ArchModuleName::InsnGroup) -> Self {
-                InsnGroup(arch_insn_group.to_primitive() as u16)
+                InsnGroup(arch_insn_group.to_primitive() as u8)
             }
         }
 

@@ -1,9 +1,11 @@
+use super::generated::cs_m68k;
 use core::marker::PhantomData;
 
-#[repr(C)]
+#[repr(transparent)]
 #[derive(Clone, Copy)]
 pub struct Details<'c> {
-    x: u32,
+    #[allow(dead_code)]
+    inner: cs_m68k,
     _phantom: PhantomData<&'c ()>,
 }
 

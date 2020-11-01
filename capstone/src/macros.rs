@@ -58,8 +58,8 @@ macro_rules! c_enum {
 
             /// Converts from a C value into this.
             #[allow(dead_code)]
-            pub(crate) fn from_c(c: libc::c_int) -> Option<Self> {
-                if let Ok(v) = <libc::c_int as core::convert::TryInto<$Primitive>>::try_into(c) {
+            pub(crate) fn from_c(c: impl core::convert::TryInto<$Primitive>) -> Option<Self> {
+                if let Ok(v) = c.try_into() {
                     Self::from_primitive(v)
                 } else {
                     None
@@ -115,8 +115,8 @@ macro_rules! c_enum_big {
 
             /// Converts from a C value into this.
             #[allow(dead_code)]
-            pub(crate) fn from_c(c: libc::c_int) -> Option<Self> {
-                if let Ok(v) = <libc::c_int as core::convert::TryInto<$Primitive>>::try_into(c) {
+            pub(crate) fn from_c(c: impl core::convert::TryInto<$Primitive>) -> Option<Self> {
+                if let Ok(v) = c.try_into() {
                     Self::from_primitive(v)
                 } else {
                     None
