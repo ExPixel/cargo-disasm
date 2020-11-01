@@ -1,5 +1,4 @@
 mod cli;
-mod strmatch;
 
 use clap::Clap as _;
 use cli::{DisasmOpts, Opts, SubOpts};
@@ -30,26 +29,14 @@ fn run(opts: &Opts) -> Result<(), Box<dyn Error>> {
 
 fn disasm(opts: &DisasmOpts, _main_opts: &Opts) -> Result<(), Box<dyn Error>> {
     use std::fs::File;
-    use strmatch::{distance, Tokenizer};
-
-    let needle = Tokenizer::new(&opts.symbol).collect::<Vec<&str>>();
-    let mut found_symbols = Vec::new();
 
     let file = File::open(&opts.binary)?;
     let data = BinaryData::from_file(&file)?;
-    let bin = Binary::new(data.clone(), |sym| {
-        if let Some(distance) = distance(needle.iter().copied(), Tokenizer::new(sym.name())) {
-            found_symbols.push(ComparedSymbol {
-                distance,
-                symbol: sym.owned(),
-            });
-        }
-    })?;
+    let bin = Binary::new(data.clone())?;
 
-    if let Some(symbol) = found_symbols.iter().min() {
+    if let Some(symbol) = bin.fuzzy_find_symbol(&opts.symbol) {
         use capstone::{Arch, Capstone, Mode};
 
-        let ComparedSymbol { ref symbol, .. } = symbol;
         println!("{}:", symbol.name());
 
         let caps = Capstone::open(Arch::X86, Mode::LittleEndian)?;
@@ -64,24 +51,24 @@ fn disasm(opts: &DisasmOpts, _main_opts: &Opts) -> Result<(), Box<dyn Error>> {
     Ok(())
 }
 
-#[derive(Eq, PartialEq)]
-pub struct ComparedSymbol {
-    distance: u32,
-    symbol: Symbol<'static>,
-}
+// #[derive(Eq, PartialEq)]
+// pub struct ComparedSymbol {
+//     distance: u32,
+//     symbol: Symbol,
+// }
 
-impl std::cmp::Ord for ComparedSymbol {
-    fn cmp(&self, other: &Self) -> std::cmp::Ordering {
-        self.distance
-            .cmp(&other.distance)
-            .then_with(|| self.symbol.address().cmp(&other.symbol.address()))
-            .then_with(|| self.symbol.offset().cmp(&other.symbol.offset()))
-            .then_with(|| self.symbol.name().cmp(&other.symbol.name()))
-    }
-}
+// impl std::cmp::Ord for ComparedSymbol {
+//     fn cmp(&self, other: &Self) -> std::cmp::Ordering {
+//         self.distance
+//             .cmp(&other.distance)
+//             .then_with(|| self.symbol.address().cmp(&other.symbol.address()))
+//             .then_with(|| self.symbol.offset().cmp(&other.symbol.offset()))
+//             .then_with(|| self.symbol.name().cmp(&other.symbol.name()))
+//     }
+// }
 
-impl std::cmp::PartialOrd for ComparedSymbol {
-    fn partial_cmp(&self, other: &Self) -> Option<std::cmp::Ordering> {
-        Some(self.cmp(other))
-    }
-}
+// impl std::cmp::PartialOrd for ComparedSymbol {
+//     fn partial_cmp(&self, other: &Self) -> Option<std::cmp::Ordering> {
+//         Some(self.cmp(other))
+//     }
+// }

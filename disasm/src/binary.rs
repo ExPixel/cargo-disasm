@@ -1,4 +1,5 @@
 use crate::error::Error;
+use crate::strmatch::{distance, Tokenizer};
 use crate::symbol::{Symbol, SymbolLang, SymbolSource, SymbolType};
 use gimli::{read::EndianReader, Dwarf, RunTimeEndian};
 use goblin::{archive::Archive, elf::Elf, mach::Mach, pe::PE, Object};
@@ -23,13 +24,13 @@ pub struct Binary {
     arch: Arch,
     endian: Endian,
     bits: Bits,
+
+    /// A vector of symbols that are sorted by their address in ascending order.
+    symbols: Vec<Symbol>,
 }
 
 impl Binary {
-    pub fn new<SymFn>(data: BinaryData, sym_fn: SymFn) -> Result<Binary, Error>
-    where
-        SymFn: for<'a> FnMut(Symbol<'a>),
-    {
+    pub fn new(data: BinaryData) -> Result<Binary, Error> {
         let mut binary = Binary {
             data,
             dwarf: None,
@@ -38,8 +39,41 @@ impl Binary {
             arch: Arch::Unknown,
             endian: Endian::Unknown,
             bits: Bits::Unknown,
+
+            symbols: Vec::new(),
         };
-        binary.parse_object(sym_fn).map(|_| binary)
+
+        binary.symbols.sort_unstable_by(|lhs, rhs| {
+            lhs.address()
+                .cmp(&rhs.address())
+                .then(lhs.end_address().cmp(&rhs.end_address()))
+        });
+
+        binary.parse_object().map(|_| binary)
+    }
+
+    pub fn fuzzy_find_symbol<'s>(&'s self, name: &str) -> Option<&'s Symbol> {
+        let tokens = Tokenizer::new(name).collect::<Vec<&str>>();
+        self.symbols
+            .iter()
+            .filter_map(|sym| {
+                Some((
+                    distance(tokens.iter().copied(), Tokenizer::new(&sym.name()))?,
+                    sym,
+                ))
+            })
+            .min_by(|lhs, rhs| {
+                lhs.0
+                    .cmp(&rhs.0)
+                    .then_with(|| lhs.1.address().cmp(&rhs.1.address()))
+                    .then_with(|| lhs.1.offset().cmp(&rhs.1.offset()))
+                    .then_with(|| lhs.1.name().cmp(&rhs.1.name()))
+            })
+            .map(|(_, sym)| sym)
+    }
+
+    pub fn data(&self) -> &[u8] {
+        &*self.data
     }
 
     pub fn arch(&self) -> Arch {
@@ -54,18 +88,15 @@ impl Binary {
         self.bits
     }
 
-    fn parse_object<SymFn>(&mut self, sym_fn: SymFn) -> Result<(), Error>
-    where
-        SymFn: for<'a> FnMut(Symbol<'a>),
-    {
+    fn parse_object(&mut self) -> Result<(), Error> {
         let data = self.data.clone();
         match Object::parse(&data)
             .map_err(|err| Error::new("failed to parse object", Box::new(err)))?
         {
-            Object::Elf(elf) => self.parse_elf_object(&elf, sym_fn),
-            Object::PE(pe) => self.parse_pe_object(&pe, sym_fn),
-            Object::Mach(mach) => self.parse_mach_object(&mach, sym_fn),
-            Object::Archive(archive) => self.parse_archive_object(&archive, sym_fn),
+            Object::Elf(elf) => self.parse_elf_object(&elf),
+            Object::PE(pe) => self.parse_pe_object(&pe),
+            Object::Mach(mach) => self.parse_mach_object(&mach),
+            Object::Archive(archive) => self.parse_archive_object(&archive),
             Object::Unknown(magic) => Err(Error::msg(format!(
                 "failed to parse object with magic value 0x{:X}",
                 magic
@@ -73,10 +104,7 @@ impl Binary {
         }
     }
 
-    fn parse_elf_object<SymFn>(&mut self, elf: &Elf, mut sym_fn: SymFn) -> Result<(), Error>
-    where
-        SymFn: for<'a> FnMut(Symbol<'a>),
-    {
+    fn parse_elf_object(&mut self, elf: &Elf) -> Result<(), Error> {
         use goblin::elf::header;
 
         self.bits = Bits::from_elf_class(elf.header.e_ident[header::EI_CLASS]);
@@ -123,7 +151,7 @@ impl Binary {
             let sym_addr = sym.st_value;
             let sym_offset = (sym_addr - section_addr) + section_offset;
 
-            let symbol = Symbol::new(
+            self.symbols.push(Symbol::new(
                 sym_name,
                 sym_addr,
                 sym_offset as usize,
@@ -131,32 +159,21 @@ impl Binary {
                 SymbolType::Function,
                 SymbolSource::Object,
                 SymbolLang::Unknown,
-            );
-
-            sym_fn(symbol);
+            ));
         }
 
         Ok(())
     }
 
-    fn parse_mach_object<SymFn>(&mut self, mach: &Mach, sym_fn: SymFn) -> Result<(), Error>
-    where
-        SymFn: for<'a> FnMut(Symbol<'a>),
-    {
+    fn parse_mach_object(&mut self, mach: &Mach) -> Result<(), Error> {
         Err(Error::msg("mach objects are not currently supported"))
     }
 
-    fn parse_pe_object<SymFn>(&mut self, pe: &PE, sym_fn: SymFn) -> Result<(), Error>
-    where
-        SymFn: for<'a> FnMut(Symbol<'a>),
-    {
+    fn parse_pe_object(&mut self, pe: &PE) -> Result<(), Error> {
         Err(Error::msg("PE objects are not currently supported"))
     }
 
-    fn parse_archive_object<SymFn>(&mut self, archive: &Archive, sym_fn: SymFn) -> Result<(), Error>
-    where
-        SymFn: for<'a> FnMut(Symbol<'a>),
-    {
+    fn parse_archive_object(&mut self, archive: &Archive) -> Result<(), Error> {
         Err(Error::msg("archive objects are not currently supported"))
     }
 }

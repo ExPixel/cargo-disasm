@@ -2,9 +2,9 @@ use std::borrow::Cow;
 use std::fmt;
 
 #[derive(Eq, PartialEq)]
-pub struct Symbol<'data> {
+pub struct Symbol {
     /// The demangled name of the symbol.
-    name: Cow<'data, str>,
+    name: String,
 
     /// The virtual address of the symbol.
     addr: u64,
@@ -25,16 +25,19 @@ pub struct Symbol<'data> {
     type_: SymbolType,
 }
 
-impl<'data> Symbol<'data> {
-    pub fn new(
-        name: impl Into<Cow<'data, str>>,
+impl Symbol {
+    pub fn new<'a, N>(
+        name: N,
         addr: u64,
         bpos: usize,
         blen: usize,
         type_: SymbolType,
         source: SymbolSource,
         mut lang: SymbolLang,
-    ) -> Self {
+    ) -> Self
+    where
+        N: Into<Cow<'a, str>>,
+    {
         use cpp_demangle::Symbol as CppSymbol;
         use rustc_demangle::try_demangle;
 
@@ -54,7 +57,7 @@ impl<'data> Symbol<'data> {
             .unwrap_or_else(|_| name);
 
         Symbol {
-            name: demangled_name,
+            name: demangled_name.into_owned(),
             addr,
             bpos,
             blen,
@@ -66,6 +69,10 @@ impl<'data> Symbol<'data> {
 
     pub fn address(&self) -> u64 {
         self.addr
+    }
+
+    pub fn end_address(&self) -> u64 {
+        self.addr + (self.blen as u64)
     }
 
     pub fn offset(&self) -> usize {
@@ -94,19 +101,6 @@ impl<'data> Symbol<'data> {
 
     pub fn type_(&self) -> SymbolType {
         self.type_
-    }
-
-    /// Converts this into a static owned symbol.
-    pub fn owned(self) -> Symbol<'static> {
-        Symbol {
-            name: Cow::from(self.name.into_owned()),
-            addr: self.addr,
-            bpos: self.bpos,
-            blen: self.blen,
-            lang: self.lang,
-            source: self.source,
-            type_: self.type_,
-        }
     }
 }
 
