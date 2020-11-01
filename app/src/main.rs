@@ -5,7 +5,7 @@ use clap::Clap as _;
 use cli::{DisasmOpts, Opts, SubOpts};
 use disasm::{
     binary::{Binary, BinaryData},
-    Symbol,
+    symbol::Symbol,
 };
 use std::error::Error;
 

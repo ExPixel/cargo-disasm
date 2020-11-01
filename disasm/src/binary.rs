@@ -1,5 +1,5 @@
 use crate::error::Error;
-use crate::{Symbol, SymbolLang, SymbolSource, SymbolType};
+use crate::symbol::{Symbol, SymbolLang, SymbolSource, SymbolType};
 use gimli::{read::EndianReader, Dwarf, RunTimeEndian};
 use goblin::{archive::Archive, elf::Elf, mach::Mach, pe::PE, Object};
 use memmap::{Mmap, MmapOptions};
