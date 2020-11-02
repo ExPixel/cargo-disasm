@@ -1,7 +1,9 @@
 use crate::binary::BinaryData;
 use crate::error::Error;
 use gimli::{read::EndianReader, Dwarf, RunTimeEndian};
+use once_cell::unsync::OnceCell;
 use std::ops::Range;
+use std::path::{Path, PathBuf};
 
 pub type BinaryDataReader = EndianReader<RunTimeEndian, BinaryData>;
 
@@ -142,6 +144,8 @@ pub struct LazyCompilationUnit {
     // FIXME use this for syntax hilighting maybe...or just remove it.
     #[allow(dead_code)]
     lang: Option<gimli::DwLang>,
+
+    lines: OnceCell<Lines>,
 }
 
 impl LazyCompilationUnit {
@@ -149,6 +153,150 @@ impl LazyCompilationUnit {
         unit: gimli::Unit<BinaryDataReader>,
         lang: Option<gimli::DwLang>,
     ) -> LazyCompilationUnit {
-        LazyCompilationUnit { unit, lang }
+        LazyCompilationUnit {
+            unit,
+            lang,
+            lines: OnceCell::new(),
+        }
     }
+
+    fn lines(&self, dwarf: &Dwarf<BinaryDataReader>) -> Result<&Lines, gimli::Error> {
+        self.lines.get_or_try_init(|| self.load_lines(dwarf))
+    }
+
+    fn load_lines(&self, dwarf: &Dwarf<BinaryDataReader>) -> Result<Lines, gimli::Error> {
+        let inc_line_program = match self.unit.line_program {
+            Some(ref line_prog) => line_prog,
+            None => return Ok(Lines::empty()),
+        };
+
+        let mut sequences = Vec::new();
+        let mut rows = inc_line_program.clone().rows();
+        let mut lines = Vec::new();
+
+        let mut seq_start_addr = 0;
+        let mut seq_prev_addr = 0;
+
+        while let Some((_, row)) = rows.next_row()? {
+            let address = row.address();
+
+            if row.end_sequence() {
+                if seq_start_addr != 0 && !lines.is_empty() {
+                    // FIXME lines should be sorted by address I think but I'm not sure. If not I
+                    //       should sort them here.
+                    sequences.push(Sequence {
+                        range: seq_start_addr..address,
+                        lines: std::mem::replace(&mut lines, Vec::new()).into_boxed_slice(),
+                    });
+                } else {
+                    // FIXME I'm not sure why it's not okay for the start address to be 0 (???)
+                    //       It doesn't SEEM valid anyway.
+                    lines.clear();
+                }
+            }
+
+            let file = row.file_index() as usize;
+            let line = row.line().unwrap_or(0) as u32;
+
+            if !lines.is_empty() {
+                if seq_prev_addr == address {
+                    let last_line = lines.last_mut().unwrap();
+                    last_line.file = file as usize;
+                    last_line.line = line;
+                    continue;
+                } else {
+                    seq_prev_addr = address;
+                }
+            } else {
+                seq_start_addr = address;
+                seq_prev_addr = address;
+            }
+
+            lines.push(Line {
+                addr: address,
+                file,
+                line,
+            });
+        }
+
+        sequences.sort_by_key(|seq| seq.range.start);
+
+        let mut files = Vec::new();
+        let header = inc_line_program.header();
+        let mut idx = 0;
+        while let Some(file) = header.file(idx) {
+            let mut path = PathBuf::new();
+
+            if let Some(directory) = file.directory(&header) {
+                let directory_raw = dwarf.attr_string(&self.unit, directory)?;
+
+                if let Ok(directory) = std::str::from_utf8(directory_raw.bytes()) {
+                    path.push(directory);
+                }
+            }
+
+            let file_path_raw = dwarf.attr_string(&self.unit, file.path_name())?;
+            if let Ok(file_path) = std::str::from_utf8(file_path_raw.bytes()) {
+                path.push(file_path);
+                files.push(path);
+            }
+
+            idx += 1;
+        }
+
+        Ok(Lines {
+            sequences: sequences.into_boxed_slice(),
+            files: files.into_boxed_slice(),
+        })
+    }
+}
+
+struct Lines {
+    sequences: Box<[Sequence]>,
+    files: Box<[PathBuf]>,
+}
+
+impl Lines {
+    fn empty() -> Lines {
+        Lines {
+            sequences: Box::new([] as [Sequence; 0]),
+            files: Box::new([] as [PathBuf; 0]),
+        }
+    }
+
+    fn lines_for_addr(&self, addr: u64) -> Option<(&Path, u32)> {
+        let sequence = self
+            .sequences
+            .binary_search_by(|probe| {
+                if probe.range.start > addr {
+                    std::cmp::Ordering::Greater
+                } else if probe.range.end <= addr {
+                    std::cmp::Ordering::Less
+                } else {
+                    std::cmp::Ordering::Equal
+                }
+            })
+            .ok()
+            .and_then(|seq_idx| self.sequences.get(seq_idx))?;
+
+        sequence
+            .lines
+            .binary_search_by(|probe| probe.addr.cmp(&addr))
+            .ok()
+            .and_then(|line_idx| sequence.lines.get(line_idx))
+            .map(|line| (self.files[line.file].as_path(), line.line))
+    }
+}
+
+/// A contiguous sequence of bytes and their associated lines.
+/// More than one line can be mapped to a single (or a block of) instruction(s).
+struct Sequence {
+    range: Range<u64>,
+    lines: Box<[Line]>,
+}
+
+struct Line {
+    addr: u64,
+    file: usize,
+    line: u32,
 }

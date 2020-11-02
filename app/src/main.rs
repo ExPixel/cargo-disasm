@@ -2,10 +2,7 @@ mod cli;
 
 use clap::Clap as _;
 use cli::{DisasmOpts, Opts, SubOpts};
-use disasm::{
-    binary::{Binary, BinaryData},
-    symbol::Symbol,
-};
+use disasm::binary::{Binary, BinaryData};
 use std::error::Error;
 
 fn main() {
@@ -32,18 +29,21 @@ fn disasm(opts: &DisasmOpts, _main_opts: &Opts) -> Result<(), Box<dyn Error>> {
 
     let file = File::open(&opts.binary)?;
     let data = BinaryData::from_file(&file)?;
-    let bin = Binary::new(data.clone())?;
+    let bin = Binary::new(data)?;
 
     if let Some(symbol) = bin.fuzzy_find_symbol(&opts.symbol) {
-        use capstone::{Arch, Capstone, Mode};
+        let disassembly = disasm::disasm(&bin, symbol)?;
 
         println!("{}:", symbol.name());
-
-        let caps = Capstone::open(Arch::X86, Mode::LittleEndian)?;
-        for insn in caps.disasm_iter(&data[symbol.offset()..symbol.end()], symbol.address()) {
-            let insn = insn?;
-            println!("  {} {}", insn.mnemonic(), insn.operands());
+        for line in disassembly.lines() {
+            println!(
+                "{:8x}    {:8}  {}",
+                line.address(),
+                line.mnemonic(),
+                line.operands()
+            );
         }
+    // disasm::print_disassembly(&disassembly, ||);
     } else {
         return Err(format!("no symbol matching `{}` was found", opts.symbol).into());
     }
