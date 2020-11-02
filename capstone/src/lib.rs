@@ -13,10 +13,12 @@ mod util;
 use core::{convert::From, fmt, marker::PhantomData, ptr::NonNull};
 
 #[cfg(feature = "std")]
-use std::{self as alloc, cell::RefCell, panic::UnwindSafe};
+use std::{
+    self as alloc, borrow::Cow, cell::RefCell, collections::HashMap as Map, panic::UnwindSafe,
+};
 
-#[cfg(feature = "alloc")]
-use alloc::{borrow::Cow, boxed::Box, collections::HashMap};
+#[cfg(all(not(feature = "std"), feature = "alloc"))]
+use alloc::{borrow::Cow, boxed::Box, collections::BTreeMap as Map};
 
 pub use arch::{InsnGroup, InsnId, Reg};
 pub use insn::{ArchDetails, Details, Insn, InsnBuffer, InsnIter};
@@ -53,7 +55,7 @@ pub struct Capstone {
     packed: PackedCSInfo,
 
     #[cfg(feature = "alloc")]
-    mnemonics: HashMap<InsnId, Cow<'static, str>>,
+    mnemonics: Map<InsnId, Cow<'static, str>>,
 
     #[cfg(feature = "alloc")]
     skipdata_callback: Option<Box<SkipdataCallback>>,
@@ -83,7 +85,7 @@ impl Capstone {
                 skipdata_callback: None,
 
                 #[cfg(feature = "alloc")]
-                mnemonics: HashMap::new(),
+                mnemonics: Map::new(),
 
                 #[cfg(feature = "alloc")]
                 skipdata_mnemonic: None,

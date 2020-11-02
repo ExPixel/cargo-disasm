@@ -43,6 +43,18 @@ impl InsnId {
     }
 }
 
+impl core::cmp::Ord for InsnId {
+    fn cmp(&self, other: &Self) -> core::cmp::Ordering {
+        self.to_c().cmp(&other.to_c())
+    }
+}
+
+impl core::cmp::PartialOrd for InsnId {
+    fn partial_cmp(&self, other: &Self) -> Option<core::cmp::Ordering> {
+        self.to_c().partial_cmp(&other.to_c())
+    }
+}
+
 /// A generic group that can be compared to any architecture specific group.
 /// This group may be equal to multiple groups from different architectures but
 /// not to multiple groups from the same architecture. This can also be converted
