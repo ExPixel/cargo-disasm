@@ -152,16 +152,32 @@ impl fmt::Display for SymbolLang {
 }
 
 #[derive(Copy, Clone, PartialEq, Eq)]
+#[repr(u8)]
 pub enum SymbolSource {
     /// The symbol was stored as part of the object file's (elf, mach-o, archive, pe, ...)
     /// structure.
-    Object,
+    Object = 0,
 
     /// The symbol was stored in DWARF debug data.
-    Dwarf,
+    Dwarf = 1,
 
     /// The symbol was found in a PDB.
-    PDB,
+    PDB = 2,
+}
+
+impl std::cmp::Ord for SymbolSource {
+    fn cmp(&self, other: &Self) -> std::cmp::Ordering {
+        // object > dwarf > PDB
+        // ^ this means that PDB symbols have HIGHER priority than DWARF
+        // and DWARF has HIGHER priority than object file symbols.
+        (*self as u8).cmp(&(*other as u8)).reverse()
+    }
+}
+
+impl std::cmp::PartialOrd for SymbolSource {
+    fn partial_cmp(&self, other: &Self) -> Option<std::cmp::Ordering> {
+        Some(self.cmp(other))
+    }
 }
 
 impl fmt::Display for SymbolSource {

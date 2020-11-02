@@ -1,10 +1,10 @@
+use crate::dwarf::DwarfInfo;
 use crate::error::Error;
+use crate::pdb::PDBInfo;
 use crate::strmatch::{distance, Tokenizer};
 use crate::symbol::{Symbol, SymbolLang, SymbolSource, SymbolType};
-use gimli::{read::EndianReader, Dwarf, RunTimeEndian};
 use goblin::{archive::Archive, elf::Elf, mach::Mach, pe::PE, Object};
 use memmap::{Mmap, MmapOptions};
-use pdb::PDB;
 use std::convert::TryFrom as _;
 use std::fmt;
 use std::fs::File;
@@ -16,10 +16,10 @@ pub struct Binary {
     data: BinaryData,
 
     /// DWARF debugging information that was found.
-    dwarf: Option<Box<Dwarf<EndianReader<RunTimeEndian, BinaryData>>>>,
+    dwarf: Option<Box<DwarfInfo>>,
 
     /// PDB debugging information that was found.
-    pdb: Option<Box<PDB<'static, BinaryData>>>,
+    pdb: Option<Box<PDBInfo>>,
 
     arch: Arch,
     endian: Endian,
@@ -52,6 +52,21 @@ impl Binary {
         binary.parse_object().map(|_| binary)
     }
 
+    /// Returns an iterator of symbols matching the given `name` string
+    /// and their calculated "distance" from the desired symbol name.
+    pub fn fuzzy_list_symbols<'s, 'n: 's>(
+        &'s self,
+        name: &'n str,
+    ) -> impl Iterator<Item = (u32, &'s Symbol)> + 's {
+        let tokens = Tokenizer::new(name).collect::<Vec<&str>>();
+        self.symbols.iter().filter_map(move |sym| {
+            Some((
+                distance(tokens.iter().copied(), Tokenizer::new(&sym.name()))?,
+                sym,
+            ))
+        })
+    }
+
     pub fn fuzzy_find_symbol<'s>(&'s self, name: &str) -> Option<&'s Symbol> {
         let tokens = Tokenizer::new(name).collect::<Vec<&str>>();
         self.symbols
@@ -65,6 +80,7 @@ impl Binary {
             .min_by(|lhs, rhs| {
                 lhs.0
                     .cmp(&rhs.0)
+                    .then_with(|| lhs.1.source().cmp(&rhs.1.source()))
                     .then_with(|| lhs.1.address().cmp(&rhs.1.address()))
                     .then_with(|| lhs.1.offset().cmp(&rhs.1.offset()))
                     .then_with(|| lhs.1.name().cmp(&rhs.1.name()))
@@ -162,6 +178,36 @@ impl Binary {
             ));
         }
 
+        let has_dwarf_debug_info = elf
+            .section_headers
+            .iter()
+            .filter_map(|header| {
+                // ugh
+                elf.shdr_strtab
+                    .get(header.sh_name)
+                    .transpose()
+                    .ok()
+                    .flatten()
+            })
+            .any(|name| DWARF_SECTIONS.contains(&name));
+
+        if has_dwarf_debug_info {
+            use gimli::EndianReader;
+            use gimli::RunTimeEndian;
+
+            let endian = RunTimeEndian::from(self.endian);
+
+            let loader = |section: gimli::SectionId| {
+                self.get_elf_section_data_by_name(&elf, section.name())
+                    .map(|d| EndianReader::new(d, endian))
+            };
+
+            let sup_loader =
+                |_section: gimli::SectionId| Ok(EndianReader::new(self.data.slice(0..0), endian));
+
+            self.dwarf = Some(Box::new(DwarfInfo::new(loader, sup_loader)?));
+        }
+
         Ok(())
     }
 
@@ -176,11 +222,32 @@ impl Binary {
     fn parse_archive_object(&mut self, archive: &Archive) -> Result<(), Error> {
         Err(Error::msg("archive objects are not currently supported"))
     }
+
+    fn get_elf_section_data_by_name(&self, elf: &Elf, name: &str) -> Result<BinaryData, Error> {
+        for section in elf.section_headers.iter() {
+            let section_name = elf
+                .shdr_strtab
+                .get(section.sh_name)
+                .transpose()
+                .map_err(|err| Error::new("failed to retrieve section name", Box::new(err)))?;
+
+            if section_name == Some(name) {
+                let start = section.sh_offset as usize;
+                let end = start + section.sh_size as usize;
+                return Ok(self.data.slice(start..end));
+            }
+        }
+
+        Ok(self.data.slice(0..0))
+    }
 }
 
 /// Reference counted and memory mapped binary data.
 #[derive(Clone)]
 pub struct BinaryData {
+    /// How much of `inner` is visible from this slice of [`BinaryData`].
+    range: std::ops::Range<usize>,
+
     /// The current offset of the binary data that is being read.
     offset: usize,
 
@@ -192,9 +259,38 @@ impl BinaryData {
     pub fn from_file(file: &File) -> io::Result<Self> {
         unsafe {
             MmapOptions::new().map(&file).map(|m| BinaryData {
+                range: 0..m.len(),
                 offset: 0,
                 inner: Rc::new(m),
             })
+        }
+    }
+
+    pub fn slice<R>(&self, range: R) -> BinaryData
+    where
+        R: std::ops::RangeBounds<usize>,
+    {
+        use std::ops::Bound;
+
+        let start = match range.start_bound() {
+            Bound::Included(b) => std::cmp::min(self.range.start + b, self.range.end),
+            Bound::Excluded(b) => std::cmp::min(self.range.start + b + 1, self.range.end),
+            Bound::Unbounded => self.range.start,
+        };
+
+        let end = match range.end_bound() {
+            Bound::Included(b) => std::cmp::min(self.range.start + b + 1, self.range.end),
+            Bound::Excluded(b) => std::cmp::min(self.range.start + b, self.range.end),
+            Bound::Unbounded => self.range.end,
+        };
+
+        // advance the offset so that `Read::read` is consistent.
+        let offset = self.offset + (start - self.range.start);
+
+        BinaryData {
+            range: start..end,
+            offset,
+            inner: self.inner.clone(),
         }
     }
 }
@@ -211,7 +307,7 @@ impl std::ops::Deref for BinaryData {
     type Target = [u8];
 
     fn deref(&self) -> &Self::Target {
-        &*self.inner
+        &self.inner[self.range.clone()]
     }
 }
 
@@ -333,6 +429,21 @@ impl From<goblin::container::Endian> for Endian {
     }
 }
 
+impl From<Endian> for gimli::RunTimeEndian {
+    fn from(e: Endian) -> gimli::RunTimeEndian {
+        match e {
+            Endian::Little => gimli::RunTimeEndian::Little,
+            Endian::Big => gimli::RunTimeEndian::Big,
+
+            #[cfg(target_endian = "little")]
+            Endian::Unknown => gimli::RunTimeEndian::Little,
+
+            #[cfg(target_endian = "big")]
+            Endian::Unknown => gimli::RunTimeEndian::Big,
+        }
+    }
+}
+
 impl fmt::Display for Endian {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         let t = match self {
@@ -343,3 +454,19 @@ impl fmt::Display for Endian {
         write!(f, "{}", t)
     }
 }
+
+/// Names used for detecting DWARF debug information.
+const DWARF_SECTIONS: &[&str] = &[
+    ".debug_abbrev",
+    ".debug_addr",
+    ".debug_info",
+    ".debug_line",
+    ".debug_line_str",
+    ".debug_str",
+    ".debug_str_offsets",
+    ".debug_types",
+    ".debug_loc",
+    ".debug_loclists",
+    ".debug_ranges",
+    ".debug_rnglists",
+];

@@ -50,25 +50,3 @@ fn disasm(opts: &DisasmOpts, _main_opts: &Opts) -> Result<(), Box<dyn Error>> {
 
     Ok(())
 }
-
-// #[derive(Eq, PartialEq)]
-// pub struct ComparedSymbol {
-//     distance: u32,
-//     symbol: Symbol,
-// }
-
-// impl std::cmp::Ord for ComparedSymbol {
-//     fn cmp(&self, other: &Self) -> std::cmp::Ordering {
-//         self.distance
-//             .cmp(&other.distance)
-//             .then_with(|| self.symbol.address().cmp(&other.symbol.address()))
-//             .then_with(|| self.symbol.offset().cmp(&other.symbol.offset()))
-//             .then_with(|| self.symbol.name().cmp(&other.symbol.name()))
-//     }
-// }
-
-// impl std::cmp::PartialOrd for ComparedSymbol {
-//     fn partial_cmp(&self, other: &Self) -> Option<std::cmp::Ordering> {
-//         Some(self.cmp(other))
-//     }
-// }

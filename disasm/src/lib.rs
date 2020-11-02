@@ -1,5 +1,7 @@
 pub mod binary;
+mod dwarf;
 pub mod error;
+mod pdb;
 mod strmatch;
 pub mod symbol;
 
