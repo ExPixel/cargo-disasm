@@ -5,7 +5,6 @@ name = "app"
 version = "0.1.0"
 dependencies = [
  "atty",
- "capstone",
  "cargo_metadata",
  "clap",
  "disasm",
