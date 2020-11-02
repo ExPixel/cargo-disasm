@@ -676,7 +676,6 @@ extern "C" fn cs_skipdata_cb(
     }
 }
 
-#[cfg(feature = "alloc")]
 #[derive(Clone, Copy, Default)]
 pub struct RegsUsed {
     read: RegsBuffer,
