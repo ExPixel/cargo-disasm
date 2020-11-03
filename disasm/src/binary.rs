@@ -131,6 +131,46 @@ impl Binary {
         );
         self.arch = Arch::from_elf_machine(elf.header.e_machine);
 
+        let has_dwarf_debug_info = elf
+            .section_headers
+            .iter()
+            .filter_map(|header| {
+                // ugh
+                elf.shdr_strtab
+                    .get(header.sh_name)
+                    .transpose()
+                    .ok()
+                    .flatten()
+            })
+            .any(|name| DWARF_SECTIONS.contains(&name));
+
+        if has_dwarf_debug_info {
+            use gimli::EndianReader;
+            use gimli::RunTimeEndian;
+
+            let endian = RunTimeEndian::from(self.endian);
+
+            let loader = |section: gimli::SectionId| {
+                self.get_elf_section_data_by_name(&elf, section.name())
+                    .map(|d| EndianReader::new(d, endian))
+            };
+
+            let sup_loader =
+                |_section: gimli::SectionId| Ok(EndianReader::new(self.data.slice(0..0), endian));
+
+            self.dwarf = Some(Box::new(DwarfInfo::new(loader, sup_loader)?));
+        }
+
+        // We only retrieve symbols from the ELF object if no symbols were found
+        // in the DWARF debug information.
+        if self.symbols.is_empty() {
+            self.gather_elf_symbols(elf)?;
+        }
+
+        Ok(())
+    }
+
+    fn gather_elf_symbols(&mut self, elf: &Elf) -> Result<(), Error> {
         for sym in elf.syms.iter().filter(|sym| sym.is_function()) {
             // FIXME handle symbols with a size of 0 (usually external symbols).
             if sym.st_size == 0 {
@@ -176,36 +216,6 @@ impl Binary {
                 SymbolSource::Object,
                 SymbolLang::Unknown,
             ));
-        }
-
-        let has_dwarf_debug_info = elf
-            .section_headers
-            .iter()
-            .filter_map(|header| {
-                // ugh
-                elf.shdr_strtab
-                    .get(header.sh_name)
-                    .transpose()
-                    .ok()
-                    .flatten()
-            })
-            .any(|name| DWARF_SECTIONS.contains(&name));
-
-        if has_dwarf_debug_info {
-            use gimli::EndianReader;
-            use gimli::RunTimeEndian;
-
-            let endian = RunTimeEndian::from(self.endian);
-
-            let loader = |section: gimli::SectionId| {
-                self.get_elf_section_data_by_name(&elf, section.name())
-                    .map(|d| EndianReader::new(d, endian))
-            };
-
-            let sup_loader =
-                |_section: gimli::SectionId| Ok(EndianReader::new(self.data.slice(0..0), endian));
-
-            self.dwarf = Some(Box::new(DwarfInfo::new(loader, sup_loader)?));
         }
 
         Ok(())
