@@ -154,23 +154,26 @@ impl fmt::Display for SymbolLang {
 #[derive(Copy, Clone, PartialEq, Eq)]
 #[repr(u8)]
 pub enum SymbolSource {
-    /// The symbol was stored as part of the object file's (elf, mach-o, archive, pe, ...)
-    /// structure.
-    Object = 0,
+    Elf,
+    Mach,
+    Pe,
+    Archive,
+    Dwarf,
+    Pdb,
+}
 
-    /// The symbol was stored in DWARF debug data.
-    Dwarf = 1,
-
-    /// The symbol was found in a PDB.
-    PDB = 2,
+impl SymbolSource {
+    pub fn priority(self) -> u8 {
+        match self {
+            SymbolSource::Dwarf | SymbolSource::Pdb => 1,
+            SymbolSource::Elf | SymbolSource::Mach | SymbolSource::Pe | SymbolSource::Archive => 2,
+        }
+    }
 }
 
 impl std::cmp::Ord for SymbolSource {
     fn cmp(&self, other: &Self) -> std::cmp::Ordering {
-        // object > dwarf > PDB
-        // ^ this means that PDB symbols have HIGHER priority than DWARF
-        // and DWARF has HIGHER priority than object file symbols.
-        (*self as u8).cmp(&(*other as u8)).reverse()
+        self.priority().cmp(&other.priority())
     }
 }
 
@@ -183,9 +186,12 @@ impl std::cmp::PartialOrd for SymbolSource {
 impl fmt::Display for SymbolSource {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         let t = match self {
-            SymbolSource::Object => "object",
-            SymbolSource::Dwarf => "DWARF",
-            SymbolSource::PDB => "PDB",
+            SymbolSource::Elf => "elf",
+            SymbolSource::Mach => "mach",
+            SymbolSource::Pe => "pe",
+            SymbolSource::Archive => "archive",
+            SymbolSource::Dwarf => "dwarf",
+            SymbolSource::Pdb => "pdb",
         };
         write!(f, "{}", t)
     }

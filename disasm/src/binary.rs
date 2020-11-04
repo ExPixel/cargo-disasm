@@ -30,7 +30,7 @@ pub struct Binary {
 }
 
 impl Binary {
-    pub fn new(data: BinaryData) -> Result<Binary, Error> {
+    pub fn new(data: BinaryData, sources: Option<&[SymbolSource]>) -> Result<Binary, Error> {
         let mut binary = Binary {
             data,
             dwarf: None,
@@ -49,7 +49,7 @@ impl Binary {
                 .then(lhs.end_address().cmp(&rhs.end_address()))
         });
 
-        binary.parse_object().map(|_| binary)
+        binary.parse_object(sources).map(|_| binary)
     }
 
     /// Returns an iterator of symbols matching the given `name` string
@@ -104,12 +104,12 @@ impl Binary {
         self.bits
     }
 
-    fn parse_object(&mut self) -> Result<(), Error> {
+    fn parse_object(&mut self, sources: Option<&[SymbolSource]>) -> Result<(), Error> {
         let data = self.data.clone();
         match Object::parse(&data)
             .map_err(|err| Error::new("failed to parse object", Box::new(err)))?
         {
-            Object::Elf(elf) => self.parse_elf_object(&elf),
+            Object::Elf(elf) => self.parse_elf_object(&elf, sources),
             Object::PE(pe) => self.parse_pe_object(&pe),
             Object::Mach(mach) => self.parse_mach_object(&mach),
             Object::Archive(archive) => self.parse_archive_object(&archive),
@@ -120,7 +120,11 @@ impl Binary {
         }
     }
 
-    fn parse_elf_object(&mut self, elf: &Elf) -> Result<(), Error> {
+    fn parse_elf_object(
+        &mut self,
+        elf: &Elf,
+        sources: Option<&[SymbolSource]>,
+    ) -> Result<(), Error> {
         use goblin::elf::header;
 
         self.bits = Bits::from_elf_class(elf.header.e_ident[header::EI_CLASS]);
@@ -130,6 +134,16 @@ impl Binary {
                 .map_err(|e| Error::new("failed to identify ELF endianness", Box::new(e)))?,
         );
         self.arch = Arch::from_elf_machine(elf.header.e_machine);
+
+        let mut load_elf_symbols = false;
+        let mut load_dwarf_symbols = sources.is_none(); // `auto` makes this true
+        for &source in sources.iter().copied().flatten() {
+            match source {
+                SymbolSource::Elf => load_elf_symbols = true,
+                SymbolSource::Dwarf => load_dwarf_symbols = true,
+                _ => {}
+            }
+        }
 
         let has_dwarf_debug_info = elf
             .section_headers
@@ -154,16 +168,54 @@ impl Binary {
                 self.get_elf_section_data_by_name(&elf, section.name())
                     .map(|d| EndianReader::new(d, endian))
             };
-
             let sup_loader =
                 |_section: gimli::SectionId| Ok(EndianReader::new(self.data.slice(0..0), endian));
+            let dwarf = Box::new(DwarfInfo::new(loader, sup_loader)?);
 
-            self.dwarf = Some(Box::new(DwarfInfo::new(loader, sup_loader)?));
+            if load_dwarf_symbols {
+                let mut sections: Vec<(std::ops::Range<u64>, usize)> = elf
+                    .section_headers
+                    .iter()
+                    .filter(|header| header.sh_addr != 0) // does not appear in the process memory
+                    .map(|header| {
+                        (
+                            header.sh_addr..(header.sh_addr + header.sh_size),
+                            header.sh_offset as usize,
+                        )
+                    })
+                    .collect();
+                sections.sort_unstable_by(|(lhs, _), (rhs, _)| {
+                    lhs.start.cmp(&rhs.start).then(lhs.end.cmp(&rhs.end))
+                });
+
+                let addr_to_offset = |addr| {
+                    sections
+                        .binary_search_by(|(probe, _)| {
+                            if probe.start > addr {
+                                std::cmp::Ordering::Greater
+                            } else if probe.end <= addr {
+                                std::cmp::Ordering::Less
+                            } else {
+                                std::cmp::Ordering::Equal
+                            }
+                        })
+                        .ok()
+                        .map(|idx| {
+                            let &(ref range, off) = &sections[idx];
+                            (addr - range.start) as usize + off
+                        })
+                };
+                dwarf.load_symbols(&mut self.symbols, addr_to_offset)?;
+            }
+            self.dwarf = Some(dwarf);
         }
 
-        // We only retrieve symbols from the ELF object if no symbols were found
-        // in the DWARF debug information.
-        if self.symbols.is_empty() {
+        // If we're using `auto` for the symbol source and no symbols are found.
+        if sources.is_none() && self.symbols.is_empty() {
+            load_elf_symbols = true;
+        }
+
+        if load_elf_symbols {
             self.gather_elf_symbols(elf)?;
         }
 
@@ -213,7 +265,7 @@ impl Binary {
                 sym_offset as usize,
                 sym.st_size as usize,
                 SymbolType::Function,
-                SymbolSource::Object,
+                SymbolSource::Elf,
                 SymbolLang::Unknown,
             ));
         }

@@ -17,4 +17,12 @@ pub enum SubOpts {
 pub struct DisasmOpts {
     pub symbol: String,
     pub binary: PathBuf,
+
+    /// Comma separated list of sources that will be used for finding symbols.
+    /// By default this is `auto`.
+    ///
+    /// Possible values are: auto, dwarf, pdb, elf, pe, mach, archive,
+    /// obj (elf + pe + mach + archive), debug (dwarf + pdb)
+    #[clap(long = "symsrc")]
+    pub symbol_source: String,
 }

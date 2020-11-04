@@ -1,5 +1,6 @@
 use crate::binary::BinaryData;
 use crate::error::Error;
+use crate::symbol::{Symbol, SymbolLang, SymbolSource, SymbolType};
 use gimli::{read::EndianReader, Dwarf, RunTimeEndian};
 use once_cell::unsync::OnceCell;
 use std::ops::Range;
@@ -31,6 +32,195 @@ impl DwarfInfo {
             compilation_units: Vec::new(),
             compilation_units_initialized: false,
         })
+    }
+
+    /// Loads DWARF symbols into the given output vector.
+    pub fn load_symbols<F>(
+        &self,
+        symbols: &mut Vec<Symbol>,
+        mut addr_to_offset: F,
+    ) -> Result<(), Error>
+    where
+        F: FnMut(u64) -> Option<usize>,
+    {
+        let mut unit_headers = self.dwarf.units();
+        while let Some(unit_header) = unit_headers
+            .next()
+            .map_err(|err| Error::new("failed to read DWARF compilation unit", Box::new(err)))?
+        {
+            let unit = if let Ok(unit) = self.dwarf.unit(unit_header) {
+                unit
+            } else {
+                continue;
+            };
+
+            // FIXME remove tree traversal code at some point (I'm actually not sure if it's useful
+            // or not). Really it was just a huge waste of time that helped me figure out that
+            // ELF sections with `sh_addr` are not actually mapped to process memory and should
+            // be discarded.
+            //
+            // let mut tree = unit
+            //     .entries_tree(None)
+            //     .map_err(|err| Error::new("failed to get unit entries tree", Box::new(err)))?;
+            // let root = tree
+            //     .root()
+            //     .map_err(|err| Error::new("failed to get entries tree root", Box::new(err)))?;
+            // self.walk_entries_tree(&unit, symbols, root, &mut addr_to_offset)
+            //     .map_err(|err| Error::new("failed to walk entries tree", Box::new(err)))?;
+
+            let mut entries = unit.entries();
+            while let Some((_, entry)) = entries.next_dfs().map_err(|err| {
+                Error::new(
+                    "failed to read DWARF entry from compilation unit",
+                    Box::new(err),
+                )
+            })? {
+                Self::symbol_from_entry(entry, &unit, &self.dwarf, &mut addr_to_offset)
+                    .map_err(|err| {
+                        Error::new("failed to process compilation unit entry", Box::new(err))
+                    })
+                    .map(|sym| {
+                        if let Some(sym) = sym {
+                            symbols.push(sym)
+                        }
+                    })?;
+            }
+        }
+        Ok(())
+    }
+
+    // FIXME remove tree traversal code at some point (I'm actually not sure if it's useful
+    // or not). Really it was just a huge waste of time that helped me figure out that
+    // ELF sections with `sh_addr` are not actually mapped to process memory and should
+    // be discarded.
+    //
+    // fn walk_entries_tree<F>(
+    //     &self,
+    //     unit: &gimli::read::Unit<BinaryDataReader>,
+    //     symbols: &mut Vec<Symbol>,
+    //     root: gimli::read::EntriesTreeNode<BinaryDataReader>,
+    //     addr_to_offset: &mut F,
+    // ) -> Result<(), gimli::Error>
+    // where
+    //     F: FnMut(u64) -> Option<usize>,
+    // {
+    //     let mut context = TreeVisitorContext {
+    //         unit,
+    //         symbols,
+    //         addr_to_offset,
+    //     };
+    //     self.visit_entry_node(root, &mut context)?;
+    //     Ok(())
+    // }
+
+    // fn visit_entry_node<'me, 'abbrev, 'unit, 'node, F>(
+    //     &'me self,
+    //     node: gimli::read::EntriesTreeNode<'abbrev, 'unit, 'node, BinaryDataReader>,
+    //     ctx: &mut TreeVisitorContext<'me, F>,
+    // ) -> Result<(), gimli::Error>
+    // where
+    //     F: FnMut(u64) -> Option<usize>,
+    // {
+    //     match node.entry().tag() {
+    //         gimli::DW_TAG_subprogram => {
+    //             if let Some(symbol) = Self::symbol_from_entry(
+    //                 node.entry(),
+    //                 ctx.unit,
+    //                 &self.dwarf,
+    //                 ctx.addr_to_offset,
+    //             )? {
+    //                 ctx.symbols.push(symbol);
+    //             }
+    //         }
+
+    //         gimli::DW_TAG_compile_unit | gimli::DW_TAG_namespace | gimli::DW_TAG_module => {
+    //             if node.entry().tag() == gimli::DW_TAG_namespace
+    //                 && node.entry().attr(gimli::DW_AT_name)?.is_none()
+    //             {
+    //                 return Ok(());
+    //             }
+
+    //             let mut children = node.children();
+    //             while let Some(child) = children.next()? {
+    //                 self.visit_entry_node(child, ctx)?;
+    //             }
+    //         }
+
+    //         tag => {}
+    //     }
+    //     Ok(())
+    // }
+
+    fn symbol_from_entry<F>(
+        entry: &gimli::read::DebuggingInformationEntry<BinaryDataReader>,
+        unit: &gimli::Unit<BinaryDataReader>,
+        dwarf: &Dwarf<BinaryDataReader>,
+        addr_to_offset: &mut F,
+    ) -> Result<Option<Symbol>, gimli::Error>
+    where
+        F: FnMut(u64) -> Option<usize>,
+    {
+        // FIXME maybe we should handle inline subroutines as well so that they can
+        //       be properly symbolicated. :\
+        if entry.tag() != gimli::DW_TAG_subprogram {
+            return Ok(None);
+        }
+
+        let mut start = None;
+        let mut end: Option<u64> = None;
+        let mut name = None;
+        let mut end_is_offset = false;
+
+        let mut attrs = entry.attrs();
+        while let Some(attr) = attrs.next()? {
+            match attr.name() {
+                gimli::DW_AT_low_pc => start = dwarf.attr_address(unit, attr.value())?,
+                gimli::DW_AT_high_pc => {
+                    if let Some(end_addr) = dwarf.attr_address(unit, attr.value())? {
+                        end = Some(end_addr);
+                    } else if let Some(end_offset) = attr.udata_value() {
+                        end = Some(end_offset);
+                        end_is_offset = true;
+                    }
+                }
+
+                // FIXME Here we use the mangled name because I couldn't figure out
+                //       how to retrieve a fully qualified name (module::submodule::Type::function)
+                //       using DW_AT_name. Maybe this is the right way to do it?
+                gimli::DW_AT_linkage_name => name = Some(dwarf.attr_string(unit, attr.value())?),
+                _ => continue,
+            }
+        }
+
+        if let (Some(start), Some(mut end), Some(name)) = (
+            start,
+            end,
+            name.as_ref()
+                .and_then(|n| std::str::from_utf8(n.bytes()).ok()),
+        ) {
+            if end_is_offset {
+                end += start;
+            }
+            let end = end; // FREEZE!
+
+            if let Some(off) = addr_to_offset(start) {
+                let len = (end - start) as usize;
+                Ok(Some(Symbol::new(
+                    name.to_string(),
+                    start,
+                    off,
+                    len,
+                    SymbolType::Function,
+                    SymbolSource::Dwarf,
+                    // FIXME use the unit to figure this out. The information is in there.
+                    SymbolLang::Unknown,
+                )))
+            } else {
+                Ok(None)
+            }
+        } else {
+            Ok(None)
+        }
     }
 
     /// This will load the compilation units and their addresses ranges
@@ -136,6 +326,15 @@ impl DwarfInfo {
         units.push(LazyCompilationUnit::new(unit, lang));
         Ok(())
     }
+}
+
+struct TreeVisitorContext<'r, F>
+where
+    F: FnMut(u64) -> Option<usize>,
+{
+    unit: &'r gimli::read::Unit<BinaryDataReader>,
+    symbols: &'r mut Vec<Symbol>,
+    addr_to_offset: &'r mut F,
 }
 
 pub struct LazyCompilationUnit {
