@@ -61,7 +61,11 @@ impl Binary {
         let tokens = Tokenizer::new(name).collect::<Vec<&str>>();
         self.symbols.iter().filter_map(move |sym| {
             Some((
-                distance(tokens.iter().copied(), Tokenizer::new(&sym.name()))?,
+                distance(
+                    tokens.iter().copied(),
+                    Tokenizer::new(&sym.name()),
+                    u32::MAX,
+                )?,
                 sym,
             ))
         })
@@ -70,14 +74,23 @@ impl Binary {
     pub fn fuzzy_find_symbol<'s>(&'s self, name: &str) -> Option<&'s Symbol> {
         let tokens = Tokenizer::new(name).collect::<Vec<&str>>();
         let symbol_search_timer = std::time::Instant::now();
+
+        let mut smallest_distance = std::u32::MAX;
         let symbol = self
             .symbols
             .iter()
             .filter_map(|sym| {
-                Some((
-                    distance(tokens.iter().copied(), Tokenizer::new(&sym.name()))?,
-                    sym,
-                ))
+                let dist = distance(
+                    tokens.iter().copied(),
+                    Tokenizer::new(&sym.name()),
+                    smallest_distance,
+                )?;
+
+                if dist < smallest_distance {
+                    smallest_distance = dist;
+                }
+
+                Some((dist, sym))
             })
             .min_by(|lhs, rhs| {
                 lhs.0
@@ -88,6 +101,7 @@ impl Binary {
                     .then_with(|| lhs.1.name().cmp(&rhs.1.name()))
             })
             .map(|(_, sym)| sym);
+
         log::trace!(
             "fuzzy matched `{}` in {}",
             name,

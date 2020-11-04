@@ -16,8 +16,23 @@ impl<'a> Tokenizer<'a> {
         self.source.next()
     }
 
-    fn peek_char(&self) -> Option<char> {
-        self.source.as_str().chars().next()
+    // fn peek_char(&self) -> Option<char> {
+    //     self.source.as_str().chars().next()
+    // }
+
+    fn next_char_if<F>(&mut self, f: F) -> bool
+    where
+        F: FnOnce(char) -> bool,
+    {
+        let mut chars = self.source.as_str().chars();
+
+        match chars.next() {
+            Some(ch) if f(ch) => {
+                self.source = chars;
+                true
+            }
+            _ => false,
+        }
     }
 }
 
@@ -28,29 +43,44 @@ impl<'a> Iterator for Tokenizer<'a> {
         let start_str = self.source.as_str();
 
         match self.next_char()? {
-            ':' if self.peek_char() == Some(':') => {
-                self.next_char().unwrap();
+            // group :: into a single token
+            ':' if self.next_char_if(|ch| ch == ':') => {
+                // DO NOTHING
             }
 
-            'a'..='z' | 'A'..='Z' | '_' => {
-                while self
-                    .peek_char()
-                    .filter(|ch| matches!(ch, 'a'..='z' | 'A'..='Z' | '_' | '0'..='9'))
-                    .is_some()
-                {
-                    self.next_char().unwrap();
+            // normalize whitespace
+            ch if ch.is_whitespace() => {
+                loop {
+                    if !self.next_char_if(|ch| ch.is_whitespace()) {
+                        break;
+                    }
                 }
+                return Some(" ");
             }
+
+            // group identifiers into a single token
+            'a'..='z' | 'A'..='Z' | '_' => loop {
+                if !self.next_char_if(|ch| matches!(ch, 'a'..='z' | 'A'..='Z' | '_' | '0'..='9')) {
+                    break;
+                }
+            },
+
+            // group numbers (possibly separated by underscores) into a single token
+            '0'..='9' => loop {
+                if !self.next_char_if(|ch| matches!(ch, '0'..='9' | '_')) {
+                    break;
+                }
+            },
 
             _ => {}
         }
 
         let end_str = self.source.as_str();
-        Some(&start_str[..(start_str.len() - end_str.len())])
+        Some(unsafe { start_str.get_unchecked(..(start_str.len() - end_str.len())) })
     }
 }
 
-pub fn distance<'lhs, 'rhs, Lhs, Rhs>(lhs: Lhs, rhs: Rhs) -> Option<u32>
+pub fn distance<'lhs, 'rhs, Lhs, Rhs>(lhs: Lhs, rhs: Rhs, max_distance: u32) -> Option<u32>
 where
     Lhs: IntoIterator<Item = &'lhs str>,
     Rhs: IntoIterator<Item = &'rhs str>,
@@ -66,6 +96,9 @@ where
                 break;
             } else {
                 dist += 1;
+                if dist > max_distance {
+                    return None;
+                }
             }
         }
     }
