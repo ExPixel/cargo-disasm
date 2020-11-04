@@ -4,7 +4,6 @@ mod logging;
 use clap::Clap as _;
 use cli::Opts;
 use disasm::binary::{Binary, BinaryData};
-use log::LevelFilter;
 use logging::AppLogger;
 use std::error::Error;
 use termcolor::ColorChoice;
@@ -29,8 +28,26 @@ fn main() {
 fn run(opts: &Opts) -> Result<(), Box<dyn Error>> {
     use std::fs::File;
 
-    if let Some(level) = opts.log {
-        unsafe { AppLogger::instance().set_level(level) };
+    unsafe { AppLogger::instance().set_level(opts.log_level_filter()) };
+    match opts.color_choice {
+        ColorChoice::Auto => unsafe {
+            AppLogger::instance().set_color_choice_out(if atty::is(atty::Stream::Stdout) {
+                ColorChoice::Always
+            } else {
+                ColorChoice::Never
+            });
+
+            AppLogger::instance().set_color_choice_err(if atty::is(atty::Stream::Stderr) {
+                ColorChoice::Always
+            } else {
+                ColorChoice::Never
+            });
+        },
+
+        choice => unsafe {
+            AppLogger::instance().set_color_choice_out(choice);
+            AppLogger::instance().set_color_choice_err(choice);
+        },
     }
 
     let file = File::open(&opts.binary)?;

@@ -3,7 +3,8 @@ use std::io::Write as _;
 use termcolor::{Color, ColorChoice, ColorSpec, StandardStream, WriteColor as _};
 
 static mut APP_LOGGER_LEVEL: LevelFilter = LevelFilter::Error;
-static mut APP_LOGGER_COLOR: ColorChoice = ColorChoice::Auto;
+static mut APP_LOGGER_COLOR_OUT: ColorChoice = ColorChoice::Auto;
+static mut APP_LOGGER_COLOR_ERR: ColorChoice = ColorChoice::Auto;
 
 pub struct AppLogger;
 
@@ -22,8 +23,12 @@ impl AppLogger {
         APP_LOGGER_LEVEL
     }
 
-    pub unsafe fn color_choice(&self) -> ColorChoice {
-        APP_LOGGER_COLOR
+    pub unsafe fn color_choice_out(&self) -> ColorChoice {
+        APP_LOGGER_COLOR_OUT
+    }
+
+    pub unsafe fn color_choice_err(&self) -> ColorChoice {
+        APP_LOGGER_COLOR_ERR
     }
 
     pub unsafe fn set_level(&self, level: LevelFilter) {
@@ -31,8 +36,12 @@ impl AppLogger {
         log::set_max_level(APP_LOGGER_LEVEL);
     }
 
-    pub unsafe fn set_color_choice(&self, color: ColorChoice) {
-        APP_LOGGER_COLOR = color;
+    pub unsafe fn set_color_choice_out(&self, color: ColorChoice) {
+        APP_LOGGER_COLOR_OUT = color;
+    }
+
+    pub unsafe fn set_color_choice_err(&self, color: ColorChoice) {
+        APP_LOGGER_COLOR_ERR = color;
     }
 
     fn write_log(&self, record: &log::Record) -> std::io::Result<()> {
@@ -45,9 +54,9 @@ impl AppLogger {
         };
 
         let mut output = if use_stderr {
-            StandardStream::stderr(unsafe { self.color_choice() })
+            StandardStream::stderr(unsafe { self.color_choice_err() })
         } else {
-            StandardStream::stdout(unsafe { self.color_choice() })
+            StandardStream::stdout(unsafe { self.color_choice_out() })
         };
 
         let mut level_color = ColorSpec::new();

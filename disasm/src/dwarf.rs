@@ -245,6 +245,7 @@ impl DwarfInfo {
         units: &mut Vec<LazyCompilationUnit>,
         ranges: &mut Vec<UnitRange>,
     ) -> Result<(), gimli::Error> {
+        let compilation_unit_search_timer = std::time::Instant::now();
         let mut unit_headers = dwarf.units();
         while let Some(unit_header) = unit_headers.next()? {
             let unit = if let Ok(unit) = dwarf.unit(unit_header) {
@@ -255,6 +256,12 @@ impl DwarfInfo {
 
             Self::add_compilation_unit(unit, dwarf, units, ranges)?;
         }
+
+        log::trace!(
+            "found {} compilation units in {}",
+            units.len(),
+            common::DurationDisplay(compilation_unit_search_timer.elapsed())
+        );
 
         ranges.sort_unstable_by_key(|r| r.0.start);
         Ok(())
@@ -360,7 +367,19 @@ impl LazyCompilationUnit {
     }
 
     fn lines(&self, dwarf: &Dwarf<BinaryDataReader>) -> Result<&Lines, gimli::Error> {
-        self.lines.get_or_try_init(|| self.load_lines(dwarf))
+        self.lines.get_or_try_init(|| {
+            let load_lines_timer = std::time::Instant::now();
+            let lines = self.load_lines(dwarf);
+            if let Ok(ref lines) = lines {
+                log::trace!(
+                    "loaded {} sequences and {} files from DWARF debug information in {}",
+                    lines.sequences.len(),
+                    lines.files.len(),
+                    common::DurationDisplay(load_lines_timer.elapsed())
+                );
+            }
+            lines
+        })
     }
 
     fn load_lines(&self, dwarf: &Dwarf<BinaryDataReader>) -> Result<Lines, gimli::Error> {
