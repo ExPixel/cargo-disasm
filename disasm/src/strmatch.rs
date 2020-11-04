@@ -1,22 +1,23 @@
+use std::iter::Peekable;
+use std::str::Chars;
+
 pub struct Tokenizer<'a> {
-    source: &'a str,
-    offset: usize,
+    source: Chars<'a>,
 }
 
 impl<'a> Tokenizer<'a> {
     pub fn new(source: &'a str) -> Tokenizer<'a> {
-        Tokenizer { source, offset: 0 }
+        Tokenizer {
+            source: source.chars(),
+        }
     }
 
     fn next_char(&mut self) -> Option<char> {
-        let mut chars = self.source[self.offset..].chars();
-        let ch = chars.next();
-        self.offset = self.source.len() - chars.as_str().len();
-        ch
+        self.source.next()
     }
 
     fn peek_char(&self) -> Option<char> {
-        self.source[self.offset..].chars().next()
+        self.source.as_str().chars().next()
     }
 }
 
@@ -24,7 +25,7 @@ impl<'a> Iterator for Tokenizer<'a> {
     type Item = &'a str;
 
     fn next(&mut self) -> Option<Self::Item> {
-        let start = self.offset;
+        let start_str = self.source.as_str();
 
         match self.next_char()? {
             ':' if self.peek_char() == Some(':') => {
@@ -44,7 +45,8 @@ impl<'a> Iterator for Tokenizer<'a> {
             _ => {}
         }
 
-        Some(&self.source[start..self.offset])
+        let end_str = self.source.as_str();
+        Some(&start_str[..(start_str.len() - end_str.len())])
     }
 }
 
