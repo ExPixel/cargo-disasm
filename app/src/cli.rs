@@ -14,7 +14,12 @@ pub struct Opts {
     /// Possible values are: auto, dwarf, pdb, elf, pe, mach, archive,
     /// obj (elf + pe + mach + archive), debug (dwarf + pdb),
     /// all (use everything)
-    #[clap(long = "symsrc", multiple = true, use_delimiter = true)]
+    #[clap(
+        long = "symsrc",
+        multiple = true,
+        use_delimiter = true,
+        default_value = "auto"
+    )]
     pub symbol_sources: Vec<String>,
 
     /// Path to Cargo.toml

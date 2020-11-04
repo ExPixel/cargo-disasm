@@ -10,23 +10,28 @@ use termcolor::ColorChoice;
 
 fn main() {
     log::set_logger(AppLogger::init()).expect("failed to set logger");
-
-    let opts = Opts::parse();
-
-    if let Err(err) = run(&opts) {
+    let has_err = if let Err(err) = run() {
         log::error!("{}", err);
         let mut last_source: &dyn Error = &*err;
         while let Some(source) = last_source.source() {
             log::error!("  caused by {}", source);
             last_source = source;
         }
-    }
-
+        true
+    } else {
+        false
+    };
     log::logger().flush();
+
+    if has_err {
+        std::process::exit(-1);
+    }
 }
 
-fn run(opts: &Opts) -> Result<(), Box<dyn Error>> {
+fn run() -> Result<(), Box<dyn Error>> {
     use std::fs::File;
+
+    let opts = Opts::parse();
 
     unsafe { AppLogger::instance().set_level(opts.log_level_filter()) };
     match opts.color_choice {
