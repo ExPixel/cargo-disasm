@@ -8,6 +8,7 @@ dependencies = [
  "cargo_metadata",
  "clap",
  "disasm",
+ "log",
  "shellexpand",
  "termcolor",
 ]
@@ -135,6 +136,10 @@ dependencies = [
 ]
 
 [[package]]
+name = "common"
+version = "0.1.0"
+
+[[package]]
 name = "constant_time_eq"
 version = "0.1.5"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -187,9 +192,11 @@ name = "disasm"
 version = "0.1.0"
 dependencies = [
  "capstone",
+ "common",
  "cpp_demangle",
  "gimli",
  "goblin",
+ "log",
  "memmap",
  "once_cell",
  "pdb",

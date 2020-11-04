@@ -171,6 +171,28 @@ impl SymbolSource {
     }
 }
 
+impl std::str::FromStr for SymbolSource {
+    type Err = &'static str;
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        if s.eq_ignore_ascii_case("elf") {
+            Ok(SymbolSource::Elf)
+        } else if s.eq_ignore_ascii_case("mach") {
+            Ok(SymbolSource::Mach)
+        } else if s.eq_ignore_ascii_case("pe") {
+            Ok(SymbolSource::Pe)
+        } else if s.eq_ignore_ascii_case("archive") {
+            Ok(SymbolSource::Archive)
+        } else if s.eq_ignore_ascii_case("dwarf") {
+            Ok(SymbolSource::Dwarf)
+        } else if s.eq_ignore_ascii_case("pdb") {
+            Ok(SymbolSource::Pdb)
+        } else {
+            Err("invalid symbol source")
+        }
+    }
+}
+
 impl std::cmp::Ord for SymbolSource {
     fn cmp(&self, other: &Self) -> std::cmp::Ordering {
         self.priority().cmp(&other.priority())

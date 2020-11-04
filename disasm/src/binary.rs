@@ -69,7 +69,9 @@ impl Binary {
 
     pub fn fuzzy_find_symbol<'s>(&'s self, name: &str) -> Option<&'s Symbol> {
         let tokens = Tokenizer::new(name).collect::<Vec<&str>>();
-        self.symbols
+        let symbol_search_timer = std::time::Instant::now();
+        let symbol = self
+            .symbols
             .iter()
             .filter_map(|sym| {
                 Some((
@@ -85,7 +87,13 @@ impl Binary {
                     .then_with(|| lhs.1.offset().cmp(&rhs.1.offset()))
                     .then_with(|| lhs.1.name().cmp(&rhs.1.name()))
             })
-            .map(|(_, sym)| sym)
+            .map(|(_, sym)| sym);
+        log::trace!(
+            "fuzzy matched `{}` in {}",
+            name,
+            common::DurationDisplay(symbol_search_timer.elapsed())
+        );
+        symbol
     }
 
     pub fn data(&self) -> &[u8] {
@@ -127,6 +135,8 @@ impl Binary {
     ) -> Result<(), Error> {
         use goblin::elf::header;
 
+        log::debug!("object type   = ELF");
+
         self.bits = Bits::from_elf_class(elf.header.e_ident[header::EI_CLASS]);
         self.endian = Endian::from(
             elf.header
@@ -134,6 +144,12 @@ impl Binary {
                 .map_err(|e| Error::new("failed to identify ELF endianness", Box::new(e)))?,
         );
         self.arch = Arch::from_elf_machine(elf.header.e_machine);
+
+        log::debug!("object bits   = {}", self.bits);
+        log::debug!("object endian = {}", self.endian);
+        log::debug!("object arch   = {}", self.arch);
+
+        let load_all_symbols_timer = std::time::Instant::now();
 
         let mut load_elf_symbols = false;
         let mut load_dwarf_symbols = sources.is_none(); // `auto` makes this true
@@ -173,6 +189,8 @@ impl Binary {
             let dwarf = Box::new(DwarfInfo::new(loader, sup_loader)?);
 
             if load_dwarf_symbols {
+                log::debug!("retrieving symbols from DWARF debug information");
+
                 let mut sections: Vec<(std::ops::Range<u64>, usize)> = elf
                     .section_headers
                     .iter()
@@ -205,7 +223,15 @@ impl Binary {
                             (addr - range.start) as usize + off
                         })
                 };
+
+                let symbols_count_before = self.symbols.len();
+                let load_symbols_timer = std::time::Instant::now();
                 dwarf.load_symbols(&mut self.symbols, addr_to_offset)?;
+                log::trace!(
+                    "found {} symbols in DWARF debug information in {}",
+                    self.symbols.len() - symbols_count_before,
+                    common::DurationDisplay(load_symbols_timer.elapsed())
+                );
             }
             self.dwarf = Some(dwarf);
         }
@@ -216,8 +242,22 @@ impl Binary {
         }
 
         if load_elf_symbols {
+            log::debug!("retrieving symbols from ELF object");
+            let symbols_count_before = self.symbols.len();
+            let load_symbols_timer = std::time::Instant::now();
             self.gather_elf_symbols(elf)?;
+            log::trace!(
+                "found {} symbols in ELF object in {}",
+                self.symbols.len() - symbols_count_before,
+                common::DurationDisplay(load_symbols_timer.elapsed())
+            );
         }
+
+        log::debug!(
+            "found {} total symbols in {}",
+            self.symbols.len(),
+            common::DurationDisplay(load_all_symbols_timer.elapsed())
+        );
 
         Ok(())
     }
