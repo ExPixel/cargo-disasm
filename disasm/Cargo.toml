@@ -10,7 +10,8 @@ edition = "2018"
 capstone = { path = "../capstone" }
 common = { path = "../common" }
 goblin = "0.2"
-gimli = "0.23"
+# gimli = "0.23"
+gimli = { git = "https://github.com/ExPixel/gimli.git" }
 rustc-demangle = "0.1"
 cpp_demangle = "0.3"
 pdb = "0.6"
