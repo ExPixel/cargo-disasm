@@ -112,10 +112,10 @@ fn run() -> Result<(), Box<dyn Error>> {
         println!("{}:", symbol.name());
         for line in disassembly.lines() {
             println!(
-                "{:8x}  {:8}  {}",
+                "{:8x}  {:>8}  {:32}",
                 line.address(),
                 line.mnemonic(),
-                line.operands()
+                line.operands(),
             );
         }
     // disasm::print_disassembly(&disassembly, ||);

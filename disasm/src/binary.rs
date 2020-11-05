@@ -43,13 +43,49 @@ impl Binary {
             symbols: Vec::new(),
         };
 
-        binary.symbols.sort_unstable_by(|lhs, rhs| {
-            lhs.address()
-                .cmp(&rhs.address())
-                .then(lhs.end_address().cmp(&rhs.end_address()))
-        });
+        binary.parse_object(sources).map(|_| {
+            let symbol_sort_timer = std::time::Instant::now();
+            binary.symbols.sort_unstable_by(|lhs, rhs| {
+                lhs.address()
+                    .cmp(&rhs.address())
+                    .then(lhs.end_address().cmp(&rhs.end_address()))
+            });
+            log::trace!(
+                "sorted {} symbols in {}",
+                binary.symbols.len(),
+                common::DurationDisplay(symbol_sort_timer.elapsed())
+            );
 
-        binary.parse_object(sources).map(|_| binary)
+            binary
+        })
+    }
+
+    /// Returns a symbol (and offset) for an address.
+    pub fn symbolicate(&self, addr: u64) -> Option<(&Symbol, u64)> {
+        let mut idx = self
+            .symbols
+            .binary_search_by(|probe| {
+                if probe.address() > addr {
+                    std::cmp::Ordering::Greater
+                } else if probe.end_address() <= addr {
+                    std::cmp::Ordering::Less
+                } else {
+                    std::cmp::Ordering::Equal
+                }
+            })
+            .ok()?;
+
+        // We might have duplicates of a symbol (e.g. from DWARF and ELF), so we want
+        // to scan backwards until we find the one with the highest priority.
+        while idx > 0 {
+            if self.symbols[idx - 1].address_range().contains(&addr) {
+                idx -= 1;
+            } else {
+                break;
+            }
+        }
+
+        self.symbols.get(idx).map(|sym| (sym, addr - sym.address()))
     }
 
     /// Returns an iterator of symbols matching the given `name` string

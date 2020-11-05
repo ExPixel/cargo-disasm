@@ -1,10 +1,13 @@
 pub mod binary;
-mod dwarf;
 pub mod error;
-mod pdb;
-mod strmatch;
 pub mod symbol;
 
+mod anal;
+mod dwarf;
+mod pdb;
+mod strmatch;
+
+use self::anal::Jump;
 use self::binary::Binary;
 use self::error::Error;
 use self::symbol::Symbol;
@@ -29,7 +32,7 @@ fn disasm_symbol_lines(
     ) {
         let insn =
             insn.map_err(|err| Error::new("failed to disassemble instruction", Box::new(err)))?;
-
+        let jump = anal::identify_jump_target(insn, caps);
         let line = DisasmLine {
             address: insn.address(),
             mnemonic: insn.mnemonic().into(),
@@ -37,11 +40,42 @@ fn disasm_symbol_lines(
             comments: None,
             bytes: insn.bytes().to_vec().into_boxed_slice(),
             source_lines: None,
+            jump,
         };
-
         disassembly.push_line(line);
     }
+    symbolicate_and_internalize_jumps(binary, symbol, disassembly);
     Ok(())
+}
+
+fn symbolicate_and_internalize_jumps(
+    binary: &Binary,
+    symbol: &Symbol,
+    disassembly: &mut Disassembly,
+) {
+    for idx in 0..disassembly.lines.len() {
+        let jump_addr = if let Jump::External(addr) = disassembly.lines[idx].jump {
+            addr
+        } else {
+            continue;
+        };
+
+        // This is an internal jump, so we can skip the more
+        // expensive symbolication step.
+        if symbol.address_range().contains(&jump_addr) {
+            disassembly.lines[idx].operands =
+                format!("{}+0x{:x}", symbol.name(), jump_addr - symbol.address()).into();
+            disassembly.lines[idx].comments = Some(format!("0x{}", jump_addr).into());
+        } else if let Some((symbol, offset)) = binary.symbolicate(jump_addr) {
+            if offset == 0 {
+                disassembly.lines[idx].operands = format!("{}", symbol.name()).into();
+            } else {
+                disassembly.lines[idx].operands =
+                    format!("{}+0x{:x}", symbol.name(), offset).into();
+            }
+            disassembly.lines[idx].comments = Some(format!("0x{}", jump_addr).into());
+        }
+    }
 }
 
 /// Creates a Capstone instance for the binary.
@@ -82,19 +116,14 @@ fn capstone_for_binary(binary: &Binary) -> Result<Capstone, Error> {
 
 pub struct Disassembly {
     lines: Vec<DisasmLine>,
-    jumps: Vec<Option<JumpTarget>>,
 }
 
 impl Disassembly {
     fn new() -> Disassembly {
-        Disassembly {
-            lines: Vec::new(),
-            jumps: Vec::new(),
-        }
+        Disassembly { lines: Vec::new() }
     }
 
     fn push_line(&mut self, line: DisasmLine) {
-        self.jumps.push(None);
         self.lines.push(line)
     }
 
@@ -110,6 +139,7 @@ pub struct DisasmLine {
     comments: Option<Box<str>>,
     bytes: Box<[u8]>,
     source_lines: Option<Box<[Box<str>]>>,
+    jump: Jump,
 }
 
 impl DisasmLine {
@@ -136,9 +166,8 @@ impl DisasmLine {
     pub fn source_lines(&self) -> &[Box<str>] {
         self.source_lines.as_deref().unwrap_or(&[])
     }
-}
 
-pub struct JumpTarget {
-    pub index: usize,
-    pub address: u64,
+    pub fn jump(&self) -> Jump {
+        self.jump
+    }
 }

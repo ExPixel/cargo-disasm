@@ -46,7 +46,7 @@ impl Symbol {
         let demangled_name = try_demangle(&*name)
             .map(|n| {
                 lang.update(SymbolLang::Rust);
-                Cow::from(format!("{}", n))
+                Cow::from(format!("{:#}", n))
             })
             .or_else(|_| {
                 CppSymbol::new(name.as_bytes()).map(|s| {
@@ -71,8 +71,13 @@ impl Symbol {
         self.addr
     }
 
+    /// One byte beyond the end of the symbol.
     pub fn end_address(&self) -> u64 {
         self.addr + (self.blen as u64)
+    }
+
+    pub fn address_range(&self) -> std::ops::Range<u64> {
+        self.address()..self.end_address()
     }
 
     pub fn offset(&self) -> usize {
