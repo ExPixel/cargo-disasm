@@ -54,29 +54,79 @@ impl DwarfInfo {
                 continue;
             };
 
-            let mut entries = unit.entries();
-            while let Some((_, entry)) = entries.next_dfs().map_err(|err| {
-                Error::new(
-                    "failed to read DWARF entry from compilation unit",
-                    Box::new(err),
-                )
-            })? {
-                Self::symbol_from_entry(entry, &unit, &self.dwarf, &mut addr_to_offset)
-                    .map_err(|err| {
-                        Error::new("failed to process compilation unit entry", Box::new(err))
-                    })
-                    .map(|sym| {
-                        if let Some(sym) = sym {
-                            symbols.push(sym)
-                        }
-                    })?;
-            }
+            self.load_symbols_from_unit(&unit, symbols, &mut addr_to_offset)
+                .map_err(|err| {
+                    Error::new(
+                        "failed to load symbols from compilation unit",
+                        Box::new(err),
+                    )
+                })?;
+
+            // let mut entries = unit.entries();
+            // while let Some((_, entry)) = entries.next_dfs().map_err(|err| {
+            //     Error::new(
+            //         "failed to read DWARF entry from compilation unit",
+            //         Box::new(err),
+            //     )
+            // })? {
+            //     Self::symbol_from_entry(entry, &unit, &self.dwarf, &mut addr_to_offset)
+            //         .map_err(|err| {
+            //             Error::new("failed to process compilation unit entry", Box::new(err))
+            //         })
+            //         .map(|sym| {
+            //             if let Some(sym) = sym {
+            //                 symbols.push(sym)
+            //             }
+            //         })?;
+            // }
         }
         Ok(())
     }
 
-    fn symbol_from_entry<F>(
-        entry: &gimli::read::DebuggingInformationEntry<BinaryDataReader>,
+    fn load_symbols_from_unit<F>(
+        &self,
+        unit: &gimli::Unit<BinaryDataReader>,
+        symbols: &mut Vec<Symbol>,
+        mut addr_to_offset: &mut F,
+    ) -> Result<(), gimli::Error>
+    where
+        F: FnMut(u64) -> Option<usize>,
+    {
+        let mut entries = unit.entries_raw(None)?;
+
+        while !entries.is_empty() {
+            let abbrev = if let Some(abbrev) = entries.read_abbreviation()? {
+                abbrev
+            } else {
+                continue;
+            };
+
+            // // FIXME maybe we should handle inline subroutines as well so that they can
+            // //       be properly symbolicated. :\
+            if abbrev.tag() == gimli::DW_TAG_subprogram {
+                if let Some(symbol) = Self::symbol_from_attributes(
+                    abbrev.attributes(),
+                    &mut entries,
+                    unit,
+                    &self.dwarf,
+                    addr_to_offset,
+                )? {
+                    symbols.push(symbol);
+                }
+            } else {
+                // skip the attributes for this DIE, we don't care about it.
+                for spec in abbrev.attributes() {
+                    entries.read_attribute(*spec)?;
+                }
+            }
+        }
+
+        Ok(())
+    }
+
+    fn symbol_from_attributes<F>(
+        attributes: &[gimli::read::AttributeSpecification],
+        entries: &mut gimli::read::EntriesRaw<BinaryDataReader>,
         unit: &gimli::Unit<BinaryDataReader>,
         dwarf: &Dwarf<BinaryDataReader>,
         addr_to_offset: &mut F,
@@ -84,19 +134,13 @@ impl DwarfInfo {
     where
         F: FnMut(u64) -> Option<usize>,
     {
-        // FIXME maybe we should handle inline subroutines as well so that they can
-        //       be properly symbolicated. :\
-        if entry.tag() != gimli::DW_TAG_subprogram {
-            return Ok(None);
-        }
-
         let mut start = None;
         let mut end: Option<u64> = None;
         let mut name = None;
         let mut end_is_offset = false;
 
-        let mut attrs = entry.attrs();
-        while let Some(attr) = attrs.next()? {
+        for spec in attributes {
+            let attr = entries.read_attribute(*spec)?;
             match attr.name() {
                 gimli::DW_AT_low_pc => start = dwarf.attr_address(unit, attr.value())?,
                 gimli::DW_AT_high_pc => {
