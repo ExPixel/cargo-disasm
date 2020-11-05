@@ -54,20 +54,6 @@ impl DwarfInfo {
                 continue;
             };
 
-            // FIXME remove tree traversal code at some point (I'm actually not sure if it's useful
-            // or not). Really it was just a huge waste of time that helped me figure out that
-            // ELF sections with `sh_addr` are not actually mapped to process memory and should
-            // be discarded.
-            //
-            // let mut tree = unit
-            //     .entries_tree(None)
-            //     .map_err(|err| Error::new("failed to get unit entries tree", Box::new(err)))?;
-            // let root = tree
-            //     .root()
-            //     .map_err(|err| Error::new("failed to get entries tree root", Box::new(err)))?;
-            // self.walk_entries_tree(&unit, symbols, root, &mut addr_to_offset)
-            //     .map_err(|err| Error::new("failed to walk entries tree", Box::new(err)))?;
-
             let mut entries = unit.entries();
             while let Some((_, entry)) = entries.next_dfs().map_err(|err| {
                 Error::new(
@@ -88,68 +74,6 @@ impl DwarfInfo {
         }
         Ok(())
     }
-
-    // FIXME remove tree traversal code at some point (I'm actually not sure if it's useful
-    // or not). Really it was just a huge waste of time that helped me figure out that
-    // ELF sections with `sh_addr` are not actually mapped to process memory and should
-    // be discarded.
-    //
-    // fn walk_entries_tree<F>(
-    //     &self,
-    //     unit: &gimli::read::Unit<BinaryDataReader>,
-    //     symbols: &mut Vec<Symbol>,
-    //     root: gimli::read::EntriesTreeNode<BinaryDataReader>,
-    //     addr_to_offset: &mut F,
-    // ) -> Result<(), gimli::Error>
-    // where
-    //     F: FnMut(u64) -> Option<usize>,
-    // {
-    //     let mut context = TreeVisitorContext {
-    //         unit,
-    //         symbols,
-    //         addr_to_offset,
-    //     };
-    //     self.visit_entry_node(root, &mut context)?;
-    //     Ok(())
-    // }
-
-    // fn visit_entry_node<'me, 'abbrev, 'unit, 'node, F>(
-    //     &'me self,
-    //     node: gimli::read::EntriesTreeNode<'abbrev, 'unit, 'node, BinaryDataReader>,
-    //     ctx: &mut TreeVisitorContext<'me, F>,
-    // ) -> Result<(), gimli::Error>
-    // where
-    //     F: FnMut(u64) -> Option<usize>,
-    // {
-    //     match node.entry().tag() {
-    //         gimli::DW_TAG_subprogram => {
-    //             if let Some(symbol) = Self::symbol_from_entry(
-    //                 node.entry(),
-    //                 ctx.unit,
-    //                 &self.dwarf,
-    //                 ctx.addr_to_offset,
-    //             )? {
-    //                 ctx.symbols.push(symbol);
-    //             }
-    //         }
-
-    //         gimli::DW_TAG_compile_unit | gimli::DW_TAG_namespace | gimli::DW_TAG_module => {
-    //             if node.entry().tag() == gimli::DW_TAG_namespace
-    //                 && node.entry().attr(gimli::DW_AT_name)?.is_none()
-    //             {
-    //                 return Ok(());
-    //             }
-
-    //             let mut children = node.children();
-    //             while let Some(child) = children.next()? {
-    //                 self.visit_entry_node(child, ctx)?;
-    //             }
-    //         }
-
-    //         tag => {}
-    //     }
-    //     Ok(())
-    // }
 
     fn symbol_from_entry<F>(
         entry: &gimli::read::DebuggingInformationEntry<BinaryDataReader>,
