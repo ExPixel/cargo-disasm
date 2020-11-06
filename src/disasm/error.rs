@@ -5,7 +5,7 @@ use std::fmt;
 pub struct Error(Box<ErrorInner>);
 
 impl Error {
-    pub(crate) fn new<M>(message: M, cause: Box<dyn StdError + Send + Sync>) -> Self
+    pub fn new<M>(message: M, cause: Box<dyn StdError + Send + Sync>) -> Self
     where
         M: Into<Cow<'static, str>>,
     {
@@ -15,7 +15,7 @@ impl Error {
         }))
     }
 
-    pub(crate) fn msg<M>(message: M) -> Self
+    pub fn msg<M>(message: M) -> Self
     where
         M: Into<Cow<'static, str>>,
     {

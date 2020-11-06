@@ -4,15 +4,31 @@ pub mod logging;
 use clap::Clap as _;
 use cli::Opts;
 use disasm::binary::{Binary, BinaryData};
+use disasm::error::Error as DisasmError;
 use logging::AppLogger;
 use std::error::Error;
-use std::path::{Path, PathBuf};
+use std::path::PathBuf;
 use termcolor::ColorChoice;
+
+fn parse_options() -> Opts {
+    if std::env::var("CARGO").is_ok() {
+        let mut args = std::env::args_os().collect::<Vec<_>>();
+        if args.len() > 2 && args[1] == "disasm" {
+            log::trace!("this is being run as a cargo subcommand");
+            args.remove(1); // this is just our subcommand forwarded from cargo
+            Opts::parse_from(args)
+        } else {
+            Opts::parse_from(args)
+        }
+    } else {
+        Opts::parse()
+    }
+}
 
 pub fn run() -> Result<(), Box<dyn Error>> {
     use std::fs::File;
 
-    let opts = Opts::parse();
+    let opts = parse_options();
 
     unsafe { AppLogger::instance().set_level(opts.log_level_filter()) };
     match opts.color_choice {
@@ -38,8 +54,18 @@ pub fn run() -> Result<(), Box<dyn Error>> {
 
     let binary_path = find_binary_path(&opts)?;
     log::debug!("using binary {}", binary_path.display());
-    let file = File::open(binary_path)?;
-    let data = BinaryData::from_file(&file)?;
+    let file = File::open(&binary_path).map_err(|err| {
+        DisasmError::new(
+            format!("failed to open `{}`", binary_path.display()),
+            Box::new(err),
+        )
+    })?;
+    let data = BinaryData::from_file(&file).map_err(|err| {
+        DisasmError::new(
+            format!("failed to load binary `{}`", binary_path.display()),
+            Box::new(err),
+        )
+    })?;
     let mut sources = Vec::new();
     let mut sources_auto = false;
     for s in opts.symbol_sources.iter() {
@@ -129,7 +155,9 @@ fn find_binary_path(opts: &Opts) -> Result<PathBuf, Box<dyn Error>> {
     if let Some(ref m) = opts.manifest_path {
         cmd.manifest_path(m);
     }
-    let metadata = cmd.exec()?;
+    let metadata = cmd.exec().map_err(|err| {
+        DisasmError::new("error occurred while running cargo_metadata", Box::new(err))
+    })?;
 
     let match_package = |package: &Package| {
         if !metadata.workspace_members.contains(&package.id) {
