@@ -8,7 +8,7 @@ pub fn measure(disassembly: &Disassembly) -> DisasmDisplayMeasure {
         measure.max_mnemonic_len =
             std::cmp::max(measure.max_mnemonic_len, line.mnemonic().len() as u16);
         measure.max_operands_len =
-            std::cmp::max(measure.max_operands_len, line.mnemonic().len() as u16);
+            std::cmp::max(measure.max_operands_len, line.operands().len() as u16);
         measure.max_comments_len =
             std::cmp::max(measure.max_comments_len, line.comments().len() as u16);
     }

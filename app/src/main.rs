@@ -6,6 +6,7 @@ use cli::Opts;
 use disasm::binary::{Binary, BinaryData};
 use logging::AppLogger;
 use std::error::Error;
+use std::path::{Path, PathBuf};
 use termcolor::ColorChoice;
 
 fn main() {
@@ -55,7 +56,9 @@ fn run() -> Result<(), Box<dyn Error>> {
         },
     }
 
-    let file = File::open(&opts.binary)?;
+    let binary_path = find_binary_path(&opts)?;
+    log::debug!("using binary {}", binary_path.display());
+    let file = File::open(binary_path)?;
     let data = BinaryData::from_file(&file)?;
     let mut sources = Vec::new();
     let mut sources_auto = false;
@@ -132,4 +135,83 @@ fn run() -> Result<(), Box<dyn Error>> {
     }
 
     Ok(())
+}
+
+/// Use options to find the binary to search for the symbol in.
+fn find_binary_path(opts: &Opts) -> Result<PathBuf, Box<dyn Error>> {
+    use cargo_metadata::{MetadataCommand, Package, Target};
+    if let Some(ref b) = opts.binary_path {
+        return Ok(b.clone());
+    }
+
+    log::trace!("running cargo_metadata");
+    let mut cmd = MetadataCommand::new();
+    if let Some(ref m) = opts.manifest_path {
+        cmd.manifest_path(m);
+    }
+    let metadata = cmd.exec()?;
+
+    let match_package = |package: &Package| {
+        if !metadata.workspace_members.contains(&package.id) {
+            return false;
+        }
+
+        if let Some(ref p) = opts.package {
+            // FIXME use the pkgid scheme instead
+            package.name.eq_ignore_ascii_case(p)
+        } else {
+            true
+        }
+    };
+
+    let match_target = |target: &Target| {
+        if let Some(ref t) = opts.target_name {
+            if !target.name.eq_ignore_ascii_case(t) {
+                return false;
+            }
+        }
+        // FIXME support the other target types at some point (test, example, bench, lib)
+        target.kind.iter().any(|k| k == "bin")
+    };
+
+    let found_targets = metadata
+        .packages
+        .iter()
+        .filter(|p| match_package(p))
+        .flat_map(|p| p.targets.iter().map(move |t| (p, t)))
+        .filter(|(_, t)| match_target(t))
+        .collect::<Vec<(&Package, &Target)>>();
+
+    if found_targets.is_empty() {
+        return Err("no matching targets were found".into());
+    }
+    if found_targets.len() > 1 {
+        let mut s = String::from("multiple matching targets were found:");
+        for (package, target) in found_targets {
+            s.push_str(&format!(
+                "\n    - `{}` ({}) in package `{}`",
+                target.name,
+                target.kind.join(", "),
+                package.name
+            ));
+        }
+        return Err(s.into());
+    }
+
+    let (_package, target) = found_targets.into_iter().next().unwrap();
+    let mut path = metadata.target_directory.clone();
+    if opts.release {
+        path.push("release");
+    } else {
+        path.push("debug");
+    }
+    path.push(&target.name);
+
+    #[cfg(target_os = "windows")]
+    if !path.is_file() {
+        path.pop();
+        path.push(format!("{}.exe", target.name));
+    }
+
+    Ok(path)
 }

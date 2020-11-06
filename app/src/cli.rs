@@ -5,8 +5,13 @@ use termcolor::ColorChoice;
 #[derive(Clap)]
 #[clap(name = "cargo-disasm", version = "0.0.1", author = "Marc C.")]
 pub struct Opts {
+    /// The name of the symbol to match and disassemble.
     pub symbol: String,
-    pub binary: PathBuf,
+
+    /// Path of the binary to disassemble. This can be left unspecified if the
+    /// Cargo options are going to be used instead or if the current directory
+    /// contains a Cargo project with one binary target.
+    pub binary_path: Option<PathBuf>,
 
     /// Comma separated list of sources that will be used for finding symbols.
     /// By default this is `auto`.
@@ -25,6 +30,16 @@ pub struct Opts {
     /// Path to Cargo.toml
     #[clap(long = "manifest-path")]
     pub manifest_path: Option<PathBuf>,
+
+    /// When using a Cargo project, this option can be used to search
+    /// a specific package for a binary.
+    #[clap(short = 'p', long = "package")]
+    pub package: Option<String>,
+
+    /// When using a Cargo project, this option can be used to search for
+    /// a target with a specific name.
+    #[clap(short = 't', long = "target")]
+    pub target_name: Option<String>,
 
     /// Disassemble the release mode build artifacts.
     #[clap(long = "release")]
