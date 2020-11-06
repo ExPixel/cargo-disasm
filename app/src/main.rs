@@ -106,16 +106,24 @@ fn run() -> Result<(), Box<dyn Error>> {
     let sources = if sources_auto { None } else { Some(sources) };
     let bin = Binary::new(data, sources.as_deref())?;
 
+    // FIXME temporary test code
     if let Some(symbol) = bin.fuzzy_find_symbol(&opts.symbol) {
         let disassembly = disasm::disasm(&bin, symbol)?;
+        let measure = disasm::display::measure(&disassembly);
+        let max_address_width = measure.max_address_width_hex();
 
         println!("{}:", symbol.name());
         for line in disassembly.lines() {
             println!(
-                "{:8x}  {:>8}  {:32}",
-                line.address(),
-                line.mnemonic(),
-                line.operands(),
+                "  {address:<max_address_width$x}    {mnemonic:<max_mnemonic_len$}  {operands:<max_operands_len$}    {comment_hash}{comments}",
+                address = line.address(),
+                mnemonic = line.mnemonic(),
+                operands = line.operands(),
+                comments = line.comments(),
+                comment_hash = if line.comments().is_empty() { "" } else { "# " },
+                max_mnemonic_len = measure.max_mnemonic_len(),
+                max_operands_len = measure.max_operands_len(),
+                max_address_width = max_address_width,
             );
         }
     // disasm::print_disassembly(&disassembly, ||);
