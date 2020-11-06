@@ -68,7 +68,7 @@ fn symbolicate_and_internalize_jumps(
             disassembly.lines[idx].comments = Some(format!("0x{}", jump_addr).into());
         } else if let Some((symbol, offset)) = binary.symbolicate(jump_addr) {
             if offset == 0 {
-                disassembly.lines[idx].operands = format!("{}", symbol.name()).into();
+                disassembly.lines[idx].operands = symbol.name().into();
             } else {
                 disassembly.lines[idx].operands =
                     format!("{}+0x{:x}", symbol.name(), offset).into();
