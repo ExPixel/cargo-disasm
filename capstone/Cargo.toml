@@ -4,7 +4,6 @@ version = "0.1.0"
 authors = ["Adolph C. <adolphc@outlook.com>"]
 edition = "2018"
 readme = "README.md"
-license = "MIT"
 license-file = "LICENSE.txt"
 homepage = "https://github.com/ExPixel/cargo-disasm"
 repository = "https://github.com/ExPixel/cargo-disasm"
