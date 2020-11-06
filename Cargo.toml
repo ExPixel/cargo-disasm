@@ -1,2 +1,26 @@
+[package]
+name = "app"
+version = "0.1.0"
+authors = ["Adolph C. <adolphc@outlook.com>"]
+edition = "2018"
+homepage = "https://github.com/ExPixel/cargo-disasm"
+repository = "https://github.com/ExPixel/cargo-disasm"
+readme = "README.md"
+description = "Disassembly viewer for Rust projects (and more)"
+
+[[bin]]
+bench = false
+path = "app/src/main.rs"
+name = "cargo-disasm"
+
+[dependencies]
+disasm = { path = "disasm" }
+clap = { version = "3.0.0-beta.2", features = ["derive"]}
+shellexpand = "2"
+cargo_metadata = "0.12"
+atty = "0.2"
+termcolor = "1"
+log = { version = "0.4", features = ["std"] }
+
 [workspace]
-members = ["capstone", "disasm", "app", "common"]
+members = ["capstone", "disasm", "common"]
