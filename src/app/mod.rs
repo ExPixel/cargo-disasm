@@ -1,5 +1,5 @@
-mod cli;
-mod logging;
+pub mod cli;
+pub mod logging;
 
 use clap::Clap as _;
 use cli::Opts;
@@ -9,27 +9,7 @@ use std::error::Error;
 use std::path::{Path, PathBuf};
 use termcolor::ColorChoice;
 
-fn main() {
-    log::set_logger(AppLogger::init()).expect("failed to set logger");
-    let has_err = if let Err(err) = run() {
-        log::error!("{}", err);
-        let mut last_source: &dyn Error = &*err;
-        while let Some(source) = last_source.source() {
-            log::error!("  caused by {}", source);
-            last_source = source;
-        }
-        true
-    } else {
-        false
-    };
-    log::logger().flush();
-
-    if has_err {
-        std::process::exit(-1);
-    }
-}
-
-fn run() -> Result<(), Box<dyn Error>> {
+pub fn run() -> Result<(), Box<dyn Error>> {
     use std::fs::File;
 
     let opts = Opts::parse();

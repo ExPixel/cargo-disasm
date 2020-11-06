@@ -1,6 +1,7 @@
 use crate::binary::BinaryData;
 use crate::error::Error;
 use crate::symbol::{Symbol, SymbolLang, SymbolSource, SymbolType};
+use crate::util;
 use gimli::{read::EndianReader, Dwarf, RunTimeEndian};
 use once_cell::unsync::OnceCell;
 use std::ops::Range;
@@ -228,7 +229,7 @@ impl DwarfInfo {
         log::trace!(
             "found {} compilation units in {}",
             units.len(),
-            common::DurationDisplay(compilation_unit_search_timer.elapsed())
+            util::DurationDisplay(compilation_unit_search_timer.elapsed())
         );
 
         ranges.sort_unstable_by_key(|r| r.0.start);
@@ -343,7 +344,7 @@ impl LazyCompilationUnit {
                     "loaded {} sequences and {} files from DWARF debug information in {}",
                     lines.sequences.len(),
                     lines.files.len(),
-                    common::DurationDisplay(load_lines_timer.elapsed())
+                    util::DurationDisplay(load_lines_timer.elapsed())
                 );
             }
             lines

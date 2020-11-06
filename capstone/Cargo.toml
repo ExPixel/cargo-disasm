@@ -1,5 +1,5 @@
 [package]
-name = "capstone"
+name = "ep-capstone"
 version = "0.1.0"
 authors = ["Adolph C. <adolphc@outlook.com>"]
 edition = "2018"

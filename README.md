@@ -12,21 +12,21 @@ $ cargo build
 $ cargo build --release
 
 # Disassemble app::main with verbose output.
-$ ./target/release/cargo-disasm -vvv app::main
+$ ./target/release/cargo-disasm -vvv cargo_disasm::main
 
 # Disassemble app::main in release mode with verbose output.
 # The incantation is a bit longer here because release mode
 # still contains some DWARF debug information but with much
 # fewer symbols. `--symsrc=all` will make cargo-disasm search
 # both DWARF and ELF symbols.
-$ ./target/release/cargo-disasm -vvv --release --symsrc=all app::main
+$ ./target/release/cargo-disasm -vvv --release --symsrc=all cargo_disasm::main
 ```
 
 Output should look like this:
 ```
 $ ./target/release/app -vvv  char::len_utf8
   trace(app): running cargo_metadata
-  debug(app): using binary /home/<me>/code/cargo-disasm/target/debug/app
+  debug(app): using binary /home/user/code/cargo-disasm/target/debug/app
   debug(disasm::binary): object type   = ELF
   debug(disasm::binary): object bits   = 64-bits
   debug(disasm::binary): object endian = little-endian

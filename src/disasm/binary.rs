@@ -1,8 +1,9 @@
-use crate::dwarf::DwarfInfo;
-use crate::error::Error;
-use crate::pdb::PDBInfo;
-use crate::strmatch::{distance, Tokenizer};
-use crate::symbol::{Symbol, SymbolLang, SymbolSource, SymbolType};
+use super::dwarf::DwarfInfo;
+use super::error::Error;
+use super::pdb::PDBInfo;
+use super::strmatch::{distance, Tokenizer};
+use super::symbol::{Symbol, SymbolLang, SymbolSource, SymbolType};
+use crate::util;
 use goblin::{archive::Archive, elf::Elf, mach::Mach, pe::PE, Object};
 use memmap::{Mmap, MmapOptions};
 use std::convert::TryFrom as _;
@@ -53,7 +54,7 @@ impl Binary {
             log::trace!(
                 "sorted {} symbols in {}",
                 binary.symbols.len(),
-                common::DurationDisplay(symbol_sort_timer.elapsed())
+                util::DurationDisplay(symbol_sort_timer.elapsed())
             );
 
             binary
@@ -141,7 +142,7 @@ impl Binary {
         log::trace!(
             "fuzzy matched `{}` in {}",
             name,
-            common::DurationDisplay(symbol_search_timer.elapsed())
+            util::DurationDisplay(symbol_search_timer.elapsed())
         );
         symbol
     }
@@ -280,7 +281,7 @@ impl Binary {
                 log::trace!(
                     "found {} symbols in DWARF debug information in {}",
                     self.symbols.len() - symbols_count_before,
-                    common::DurationDisplay(load_symbols_timer.elapsed())
+                    util::DurationDisplay(load_symbols_timer.elapsed())
                 );
             }
             self.dwarf = Some(dwarf);
@@ -299,14 +300,14 @@ impl Binary {
             log::trace!(
                 "found {} symbols in ELF object in {}",
                 self.symbols.len() - symbols_count_before,
-                common::DurationDisplay(load_symbols_timer.elapsed())
+                util::DurationDisplay(load_symbols_timer.elapsed())
             );
         }
 
         log::debug!(
             "found {} total symbols in {}",
             self.symbols.len(),
-            common::DurationDisplay(load_all_symbols_timer.elapsed())
+            util::DurationDisplay(load_all_symbols_timer.elapsed())
         );
 
         Ok(())

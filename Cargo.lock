@@ -7,8 +7,15 @@ dependencies = [
  "atty",
  "cargo_metadata",
  "clap",
- "disasm",
+ "cpp_demangle",
+ "ep-capstone",
+ "gimli",
+ "goblin",
  "log",
+ "memmap",
+ "once_cell",
+ "pdb",
+ "rustc-demangle",
  "shellexpand",
  "termcolor",
 ]
@@ -63,15 +70,6 @@ dependencies = [
  "arrayref",
  "arrayvec",
  "constant_time_eq",
-]
-
-[[package]]
-name = "capstone"
-version = "0.1.0"
-dependencies = [
- "bitflags",
- "cc",
- "libc",
 ]
 
 [[package]]
@@ -136,10 +134,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "common"
-version = "0.1.0"
-
-[[package]]
 name = "constant_time_eq"
 version = "0.1.5"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -188,19 +182,12 @@ dependencies = [
 ]
 
 [[package]]
-name = "disasm"
+name = "ep-capstone"
 version = "0.1.0"
 dependencies = [
- "capstone",
- "common",
- "cpp_demangle",
- "gimli",
- "goblin",
- "log",
- "memmap",
- "once_cell",
- "pdb",
- "rustc-demangle",
+ "bitflags",
+ "cc",
+ "libc",
 ]
 
 [[package]]
