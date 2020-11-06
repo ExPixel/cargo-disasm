@@ -10,9 +10,12 @@ repository = "https://github.com/ExPixel/cargo-disasm"
 description = "incomplete bindings for capstone"
 
 include = [
+    "Cargo.toml",
+    "LICENSE.txt",
+    "README.md",
     "src/**/*.rs",
-    "test_helper.c",
     "build.rs",
+    "test_helper.c",
     "clib/arch/**/*",
     "clib/arch/**/*",
     "clib/include/**/*",
@@ -22,7 +25,7 @@ include = [
     "clib/*.mk",
     "clib/*.TXT",
     "clib/*.in",
-    "clib/*.md",
+    "clib/*.md"
 ]
 
 [features]
