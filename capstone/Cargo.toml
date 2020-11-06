@@ -3,6 +3,28 @@ name = "ep-capstone"
 version = "0.1.0"
 authors = ["Adolph C. <adolphc@outlook.com>"]
 edition = "2018"
+readme = "README.md"
+license = "MIT"
+license-file = "LICENSE.txt"
+homepage = "https://github.com/ExPixel/cargo-disasm"
+repository = "https://github.com/ExPixel/cargo-disasm"
+description = "incomplete bindings for capstone"
+
+include = [
+    "src/**/*.rs",
+    "test_helper.c",
+    "build.rs",
+    "clib/arch/**/*",
+    "clib/arch/**/*",
+    "clib/include/**/*",
+    "clib/windows/**/*",
+    "clib/*.c",
+    "clib/*.h",
+    "clib/*.mk",
+    "clib/*.TXT",
+    "clib/*.in",
+    "clib/*.md",
+]
 
 [features]
 
