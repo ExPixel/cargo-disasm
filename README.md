@@ -17,7 +17,7 @@ cargo install cargo-disasm
 
 # Usage
 
-To view the assembly of a function `foo::bar::baz()`, a function `bar` in submodule
+To view the assembly of a function `foo::bar::baz()`, a function `baz` in module
 `bar` in crate `foo`, the subcommand can be run from your crate's root directory:
 ```sh
 cargo disasm foo::bar::baz
