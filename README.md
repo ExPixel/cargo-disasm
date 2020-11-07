@@ -6,9 +6,10 @@ cargo-disasm
 
 
 > **This is still under heavy development**
+>
 > For now `cargo-disasm` can disassemble symbols from `ELF` object files
-> for binary crates and make use of DWARF debug information for symbol discovery. 
-> check [here](#todo) to see the current progress.
+> for binary crates and make use of DWARF debug information for symbol discovery.
+> Check [here](#todo) to see the current progress.
 
 ```sh
 cargo install cargo-disasm
@@ -32,21 +33,21 @@ cargo disasm --release --symsrc=all foo::bar::baz
 > be able to figure this own on its own.
 
 # TODO
-[ ] Optional arrows for displaying jump sources and targets
-[ ] Showing source code alongside disassembly
-[ ] Syntax highlighting for disassembly
+- [ ] Optional arrows for displaying jump sources and targets
+- [ ] Showing source code alongside disassembly
+- [ ] Syntax highlighting for disassembly
 
-**Windows**
-[ ] PE/COFF file disassembly and symbol discovery
-[ ] use PDB for symbol discovery and line information
+**Windows**  
+- [ ] PE/COFF file disassembly and symbol discovery
+- [ ] use PDB for symbol discovery and line information
 
-**MacOS**
-[ ] Mach file disassembly and symbol discovery
-[ ] use dSYM (DWARF) for symbol discovery and line information
+**MacOS**  
+- [ ] Mach file disassembly and symbol discovery
+- [ ] use dSYM (DWARF) for symbol discovery and line information
 
-**Linux**
-[x] ELF file disassembly and symbol discovery
-[x] use DWARF for symbol discovery and line information
+**Linux**  
+- [x] ELF file disassembly and symbol discovery
+- [x] use DWARF for symbol discovery and line information
 
 [crate]: https://crates.io/crates/cargo-disasm
 [crate-shield]: https://img.shields.io/crates/v/cargo-disasm?style=flat-square
