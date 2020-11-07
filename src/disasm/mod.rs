@@ -74,7 +74,7 @@ fn symbolicate_and_internalize_jumps(
                 disassembly.lines[idx].operands =
                     format!("{}+0x{:x}", symbol.name(), offset).into();
             }
-            disassembly.lines[idx].comments = Some(format!("0x{}", jump_addr).into());
+            disassembly.lines[idx].comments = Some(format!("0x{:x}", jump_addr).into());
         }
     }
 }
