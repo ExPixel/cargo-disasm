@@ -35,7 +35,6 @@ termcolor = "1"
 
 
 # Library Crate Dependencies
-capstone = { package = "ep-capstone", version = "0.1.0", path = "capstone" }
 goblin = "0.2"
 gimli = "0.23"
 rustc-demangle = "0.1"
@@ -46,6 +45,13 @@ once_cell = "1.4"
 
 # Binary & Library Crate Dependencies
 log = { version = "0.4", features = ["std"] }
+
+[dependencies.capstone]
+package = "ep-capstone"
+version = "0.1.0"
+path = "capstone"
+default-features = false
+features = ["std", "sys-dyn-mem", "arm", "aarch64", "powerpc", "sparc", "x86"]
 
 [workspace]
 members = ["capstone"]
