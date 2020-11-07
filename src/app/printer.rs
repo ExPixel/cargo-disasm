@@ -66,7 +66,7 @@ pub fn print_disassembly(
         if !line.comments().is_empty() {
             write!(out, "{}", space_lg)?;
             out.set_color(&clr_comm)?;
-            write!(out, "# {:<1$}", line.comments(), max_comm)?;
+            write!(out, "; {:<1$}", line.comments(), max_comm)?;
         }
 
         out.set_color(&clr_norm)?;
