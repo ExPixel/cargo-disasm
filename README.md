@@ -1,65 +1,56 @@
-# cargo-disasm
-Disassembly viewer for rust projects.
+cargo-disasm
+============
+[![crates.io version][crate-shield]][crate] [![build status][build-shield]][build-status] [![license][license-shield]][license]
 
-** Still very much a work in progress. **
+> A cargo subcommand that displays the assembly generated for a function.
 
-At the moment the application only works on Linux and can be used like this:
+
+> **This is still under heavy development**
+> For now `cargo-disasm` can disassemble symbols from `ELF` object files
+> for binary crates and make use of DWARF debug information for symbol discovery. 
+> check [here](#todo) to see the current progress.
+
 ```sh
-# Create a debug build for more symbol information.
-$ cargo build
-
-# Create a release build for faster disassembly.
-$ cargo build --release
-
-# Disassemble app::main with verbose output.
-$ ./target/release/cargo-disasm -vvv cargo_disasm::main
-
-# Disassemble app::main in release mode with verbose output.
-# The incantation is a bit longer here because release mode
-# still contains some DWARF debug information but with much
-# fewer symbols. `--symsrc=all` will make cargo-disasm search
-# both DWARF and ELF symbols.
-$ ./target/release/cargo-disasm -vvv --release --symsrc=all cargo_disasm::main
+cargo install cargo-disasm
 ```
 
-Output should look like this:
+# Usage
+
+To view the assembly of a function `foo::bar::baz()`, a function `bar` in submodule
+`bar` in crate `foo`, the subcommand can be run from your crate's root directory:
+```sh
+cargo disasm foo::bar::baz
 ```
-$ ./target/release/app -vvv  char::len_utf8
-  trace(app): running cargo_metadata
-  debug(app): using binary /home/user/code/cargo-disasm/target/debug/app
-  debug(disasm::binary): object type   = ELF
-  debug(disasm::binary): object bits   = 64-bits
-  debug(disasm::binary): object endian = little-endian
-  debug(disasm::binary): object arch   = x86_64
-  debug(disasm::binary): retrieving symbols from DWARF debug information
-  trace(disasm::binary): found 22949 symbols in DWARF debug information in 183.582 ms
-  debug(disasm::binary): found 22949 total symbols in 183.729 ms
-  trace(disasm::binary): sorted 22949 symbols in 3.079 ms
-  trace(disasm::binary): fuzzy matched `char::len_utf8` in 3.252 ms
-core::char::methods::len_utf8:
-  c4120    sub  rsp, 0x18                             
-  c4124    mov  dword ptr [rsp + 0x14], edi           
-  c4128    cmp  edi, 0x80                             
-  c412e    mov  dword ptr [rsp + 4], edi              
-  c4132    jb   core::char::methods::len_utf8+0x21    # 0x803137
-  c4134    mov  eax, dword ptr [rsp + 4]              
-  c4138    cmp  eax, 0x800                            
-  c413d    jb   core::char::methods::len_utf8+0x39    # 0x803161
-  c413f    jmp  core::char::methods::len_utf8+0x2c    # 0x803148
-  c4141    mov  qword ptr [rsp + 8], 1                
-  c414a    jmp  core::char::methods::len_utf8+0x5c    # 0x803196
-  c414c    mov  eax, dword ptr [rsp + 4]              
-  c4150    cmp  eax, 0x10000                          
-  c4155    jb   core::char::methods::len_utf8+0x4f    # 0x803183
-  c4157    jmp  core::char::methods::len_utf8+0x44    # 0x803172
-  c4159    mov  qword ptr [rsp + 8], 2                
-  c4162    jmp  core::char::methods::len_utf8+0x5a    # 0x803194
-  c4164    mov  qword ptr [rsp + 8], 4                
-  c416d    jmp  core::char::methods::len_utf8+0x58    # 0x803192
-  c416f    mov  qword ptr [rsp + 8], 3                
-  c4178    jmp  core::char::methods::len_utf8+0x5a    # 0x803194
-  c417a    jmp  core::char::methods::len_utf8+0x5c    # 0x803196
-  c417c    mov  rax, qword ptr [rsp + 8]              
-  c4181    add  rsp, 0x18                             
-  c4185    ret             
+
+Sometimes `cargo-disasm` has trouble finding your symbols in `release` mode. To make
+sure that `cargo-disasm` is searching all sources available, `--symsrc=all` can be
+passed as an argument like so:
+```sh
+cargo disasm --release --symsrc=all foo::bar::baz
 ```
+> Hopefully this solution is temporary and the default `--symsrc=auto` should
+> be able to figure this own on its own.
+
+# TODO
+[ ] Optional arrows for displaying jump sources and targets
+[ ] Showing source code alongside disassembly
+[ ] Syntax highlighting for disassembly
+
+**Windows**
+[ ] PE/COFF file disassembly and symbol discovery
+[ ] use PDB for symbol discovery and line information
+
+**MacOS**
+[ ] Mach file disassembly and symbol discovery
+[ ] use dSYM (DWARF) for symbol discovery and line information
+
+**Linux**
+[x] ELF file disassembly and symbol discovery
+[x] use DWARF for symbol discovery and line information
+
+[crate]: https://crates.io/crates/cargo-disasm
+[crate-shield]: https://img.shields.io/crates/v/cargo-disasm?style=flat-square
+[build-shield]: https://img.shields.io/github/workflow/status/ExPixel/cargo-disasm/Test?style=flat-square
+[build-status]: https://github.com/ExPixel/cargo-disasm/actions?query=workflow%3ATest
+[license-shield]: https://img.shields.io/github/license/expixel/cargo-disasm?style=flat-square
+[license]: https://github.com/ExPixel/cargo-disasm/blob/main/LICENSE.txt
