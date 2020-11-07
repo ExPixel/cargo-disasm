@@ -1,3 +1,3 @@
 mod disasm;
 pub mod util;
-pub use disasm::*;
+pub use self::disasm::*;
