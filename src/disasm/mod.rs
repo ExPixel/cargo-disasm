@@ -5,7 +5,7 @@ pub mod symbol;
 mod anal;
 mod dwarf;
 mod pdb;
-mod strmatch;
+pub mod strmatch;
 
 use self::anal::Jump;
 use self::binary::Binary;
@@ -41,6 +41,7 @@ fn disasm_symbol_lines(
             bytes: insn.bytes().to_vec().into_boxed_slice(),
             source_lines: None,
             jump,
+            is_symbolicated_jump: false,
         };
         disassembly.push_line(line);
     }
@@ -66,6 +67,7 @@ fn symbolicate_and_internalize_jumps(
             disassembly.lines[idx].operands =
                 format!("{}+0x{:x}", symbol.name(), jump_addr - symbol.address()).into();
             disassembly.lines[idx].comments = Some(format!("0x{:x}", jump_addr).into());
+            disassembly.lines[idx].is_symbolicated_jump = true;
         } else if let Some((symbol, offset)) = binary.symbolicate(jump_addr) {
             if offset == 0 {
                 disassembly.lines[idx].operands = symbol.name().into();
@@ -74,6 +76,7 @@ fn symbolicate_and_internalize_jumps(
                     format!("{}+0x{:x}", symbol.name(), offset).into();
             }
             disassembly.lines[idx].comments = Some(format!("0x{:x}", jump_addr).into());
+            disassembly.lines[idx].is_symbolicated_jump = true;
         }
     }
 }
@@ -140,6 +143,7 @@ pub struct DisasmLine {
     bytes: Box<[u8]>,
     source_lines: Option<Box<[Box<str>]>>,
     jump: Jump,
+    is_symbolicated_jump: bool,
 }
 
 impl DisasmLine {
@@ -169,5 +173,9 @@ impl DisasmLine {
 
     pub fn jump(&self) -> Jump {
         self.jump
+    }
+
+    pub fn is_symbolicated_jump(&self) -> bool {
+        self.is_symbolicated_jump
     }
 }

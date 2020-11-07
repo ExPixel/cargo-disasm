@@ -1,5 +1,6 @@
 pub mod cli;
 pub mod logging;
+mod printer;
 
 use clap::Clap as _;
 use cli::Opts;
@@ -9,6 +10,7 @@ use logging::AppLogger;
 use std::error::Error;
 use std::path::PathBuf;
 use termcolor::ColorChoice;
+use termcolor::StandardStream;
 
 fn parse_options() -> Opts {
     if std::env::var("CARGO").is_ok() {
@@ -31,26 +33,30 @@ pub fn run() -> Result<(), Box<dyn Error>> {
     let opts = parse_options();
 
     unsafe { AppLogger::instance().set_level(opts.log_level_filter()) };
-    match opts.color_choice {
+    let color_choice = match opts.color_choice {
         ColorChoice::Auto => unsafe {
-            AppLogger::instance().set_color_choice_out(if atty::is(atty::Stream::Stdout) {
+            let out_choice = if atty::is(atty::Stream::Stdout) {
                 ColorChoice::Always
             } else {
                 ColorChoice::Never
-            });
+            };
+            AppLogger::instance().set_color_choice_out(out_choice);
 
             AppLogger::instance().set_color_choice_err(if atty::is(atty::Stream::Stderr) {
                 ColorChoice::Always
             } else {
                 ColorChoice::Never
             });
+
+            out_choice
         },
 
         choice => unsafe {
             AppLogger::instance().set_color_choice_out(choice);
             AppLogger::instance().set_color_choice_err(choice);
+            choice
         },
-    }
+    };
 
     let binary_path = find_binary_path(&opts)?;
     log::debug!("using binary {}", binary_path.display());
@@ -118,24 +124,9 @@ pub fn run() -> Result<(), Box<dyn Error>> {
     // FIXME temporary test code
     if let Some(symbol) = bin.fuzzy_find_symbol(&opts.symbol) {
         let disassembly = disasm::disasm(&bin, symbol)?;
-        let measure = disasm::display::measure(&disassembly);
-        let max_address_width = measure.max_address_width_hex();
-
-        println!("{}:", symbol.name());
-        for line in disassembly.lines() {
-            println!(
-                "  {address:<max_address_width$x}    {mnemonic:<max_mnemonic_len$}  {operands:<max_operands_len$}    {comment_hash}{comments}",
-                address = line.address(),
-                mnemonic = line.mnemonic(),
-                operands = line.operands(),
-                comments = line.comments(),
-                comment_hash = if line.comments().is_empty() { "" } else { "# " },
-                max_mnemonic_len = measure.max_mnemonic_len(),
-                max_operands_len = measure.max_operands_len(),
-                max_address_width = max_address_width,
-            );
-        }
-    // disasm::print_disassembly(&disassembly, ||);
+        let mut stdout = StandardStream::stdout(color_choice);
+        printer::print_disassembly(&mut stdout, symbol, &disassembly)
+            .map_err(|err| disasm::Error::new("error occurred while printing disassembly", err))?;
     } else {
         return Err(format!("no symbol matching `{}` was found", opts.symbol).into());
     }
