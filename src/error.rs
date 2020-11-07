@@ -5,7 +5,7 @@ use std::fmt;
 pub struct Error(Box<ErrorInner>);
 
 impl Error {
-    pub fn new<M>(message: M, cause: Box<dyn StdError + Send + Sync>) -> Self
+    pub fn new<M>(message: M, cause: Box<dyn StdError>) -> Self
     where
         M: Into<Cow<'static, str>>,
     {
@@ -29,7 +29,7 @@ impl Error {
 #[derive(Debug)]
 struct ErrorInner {
     message: Cow<'static, str>,
-    cause: Option<Box<dyn StdError + Send + Sync>>,
+    cause: Option<Box<dyn StdError>>,
 }
 
 impl fmt::Debug for Error {

@@ -1,8 +1,8 @@
 use super::dwarf::DwarfInfo;
-use super::error::Error;
 use super::pdb::PDBInfo;
 use super::strmatch::{distance, Tokenizer};
 use super::symbol::{Symbol, SymbolLang, SymbolSource, SymbolType};
+use crate::error::Error;
 use crate::util;
 use goblin::{archive::Archive, elf::Elf, mach::Mach, pe::PE, Object};
 use memmap::{Mmap, MmapOptions};

@@ -1,6 +1,5 @@
 pub mod binary;
 pub mod display;
-pub mod error;
 pub mod symbol;
 
 mod anal;
@@ -10,8 +9,8 @@ mod strmatch;
 
 use self::anal::Jump;
 use self::binary::Binary;
-use self::error::Error;
 use self::symbol::Symbol;
+use crate::error::Error;
 use capstone::Capstone;
 
 pub fn disasm(binary: &Binary, symbol: &Symbol) -> Result<Disassembly, Error> {
