@@ -3,6 +3,8 @@ cargo-disasm
 [![crates.io version][crate-shield]][crate] [![build status][build-shield]][build-status] [![license][license-shield]][license]
 
 > A cargo subcommand that displays the assembly generated for a function.
+> `cargo-disasm` does not require recompiling your project, it disassembles
+> and finds symbols in your binary directly.
 
 
 > **This is still under heavy development**
@@ -20,6 +22,8 @@ cargo install cargo-disasm
 To view the assembly of a function `foo::bar::baz()`, a function `baz` in module
 `bar` in crate `foo`, the subcommand can be run from your crate's root directory:
 ```sh
+# Make sure that your project has a binary to disassemble first:
+cargo build
 cargo disasm foo::bar::baz
 ```
 
@@ -27,6 +31,8 @@ Sometimes `cargo-disasm` has trouble finding your symbols in `release` mode. To 
 sure that `cargo-disasm` is searching all sources available, `--symsrc=all` can be
 passed as an argument like so:
 ```sh
+# Make sure that your project has a release binary to disassemble first:
+cargo build --release
 cargo disasm --release --symsrc=all foo::bar::baz
 ```
 > This solution is temporary and the default `--symsrc=auto` should
