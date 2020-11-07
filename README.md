@@ -29,8 +29,8 @@ passed as an argument like so:
 ```sh
 cargo disasm --release --symsrc=all foo::bar::baz
 ```
-> Hopefully this solution is temporary and the default `--symsrc=auto` should
-> be able to figure this own on its own.
+> This solution is temporary and the default `--symsrc=auto` should
+> be able to figure this out on its own soon.
 
 # TODO
 - [ ] Optional arrows for displaying jump sources and targets
