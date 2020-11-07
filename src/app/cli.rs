@@ -46,13 +46,13 @@ pub struct Opts {
     pub release: bool,
 
     /// Sets the log level: 0 - +warning +error, 1 - +info, 2 - +debug, 3 - +trace
-    /// The `silent` flag can be used to turn off logging completely.
+    /// The `quiet` flag can be used to turn off logging completely.
     #[clap(short, long, parse(from_occurrences))]
     pub verbose: u32,
 
     /// Disables logging.
-    #[clap(long)]
-    pub silent: bool,
+    #[clap(short, long)]
+    pub quiet: bool,
 
     /// Coloring: auto, always, never, and always-ansi (only uses ansi color codes).
     #[clap(long = "color", default_value = "auto", parse(try_from_str = parse_colorchoice))]
@@ -63,7 +63,7 @@ impl Opts {
     pub fn log_level_filter(&self) -> log::LevelFilter {
         use log::LevelFilter;
 
-        if self.silent {
+        if self.quiet {
             return LevelFilter::Off;
         }
 
