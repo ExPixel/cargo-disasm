@@ -17,6 +17,8 @@ cargo-disasm
 cargo install cargo-disasm
 ```
 
+[![asciicast demo](https://asciinema.org/a/371231.svg)](https://asciinema.org/a/371231)
+
 # Usage
 
 To view the assembly of a function `foo::bar::baz()`, a function `baz` in module
