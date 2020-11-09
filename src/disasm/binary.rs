@@ -226,65 +226,7 @@ impl Binary {
             .any(|name| DWARF_SECTIONS.contains(&name));
 
         if has_dwarf_debug_info {
-            use gimli::EndianReader;
-            use gimli::RunTimeEndian;
-
-            let endian = RunTimeEndian::from(self.endian);
-
-            let loader = |section: gimli::SectionId| {
-                self.get_elf_section_data_by_name(&elf, section.name())
-                    .map(|d| EndianReader::new(d, endian))
-            };
-            let sup_loader =
-                |_section: gimli::SectionId| Ok(EndianReader::new(self.data.slice(0..0), endian));
-            let dwarf = Box::new(DwarfInfo::new(loader, sup_loader)?);
-
-            if load_dwarf_symbols {
-                log::debug!("retrieving symbols from DWARF debug information");
-
-                let mut sections: Vec<(std::ops::Range<u64>, usize)> = elf
-                    .section_headers
-                    .iter()
-                    .filter(|header| header.sh_addr != 0) // does not appear in the process memory
-                    .map(|header| {
-                        (
-                            header.sh_addr..(header.sh_addr + header.sh_size),
-                            header.sh_offset as usize,
-                        )
-                    })
-                    .collect();
-                sections.sort_unstable_by(|(lhs, _), (rhs, _)| {
-                    lhs.start.cmp(&rhs.start).then(lhs.end.cmp(&rhs.end))
-                });
-
-                let addr_to_offset = |addr| {
-                    sections
-                        .binary_search_by(|(probe, _)| {
-                            if probe.start > addr {
-                                std::cmp::Ordering::Greater
-                            } else if probe.end <= addr {
-                                std::cmp::Ordering::Less
-                            } else {
-                                std::cmp::Ordering::Equal
-                            }
-                        })
-                        .ok()
-                        .map(|idx| {
-                            let &(ref range, off) = &sections[idx];
-                            (addr - range.start) as usize + off
-                        })
-                };
-
-                let symbols_count_before = self.symbols.len();
-                let load_symbols_timer = std::time::Instant::now();
-                dwarf.load_symbols(&mut self.symbols, addr_to_offset)?;
-                log::trace!(
-                    "found {} symbols in DWARF debug information in {}",
-                    self.symbols.len() - symbols_count_before,
-                    util::DurationDisplay(load_symbols_timer.elapsed())
-                );
-            }
-            self.dwarf = Some(dwarf);
+            self.parse_elf_dwarf(elf, load_dwarf_symbols)?;
         }
 
         // If we're using `auto` for the symbol source and no symbols are found.
@@ -310,6 +252,69 @@ impl Binary {
             util::DurationDisplay(load_all_symbols_timer.elapsed())
         );
 
+        Ok(())
+    }
+
+    fn parse_elf_dwarf(&mut self, elf: &Elf, load_dwarf_symbols: bool) -> Result<(), Error> {
+        use gimli::EndianReader;
+        use gimli::RunTimeEndian;
+
+        let endian = RunTimeEndian::from(self.endian);
+
+        let loader = |section: gimli::SectionId| {
+            self.get_elf_section_data_by_name(&elf, section.name())
+                .map(|d| EndianReader::new(d, endian))
+        };
+        let sup_loader =
+            |_section: gimli::SectionId| Ok(EndianReader::new(self.data.slice(0..0), endian));
+        let dwarf = Box::new(DwarfInfo::new(loader, sup_loader)?);
+
+        if load_dwarf_symbols {
+            log::debug!("retrieving symbols from DWARF debug information");
+
+            let mut sections: Vec<(std::ops::Range<u64>, usize)> = elf
+                .section_headers
+                .iter()
+                .filter(|header| header.sh_addr != 0) // does not appear in the process memory
+                .map(|header| {
+                    (
+                        header.sh_addr..(header.sh_addr + header.sh_size),
+                        header.sh_offset as usize,
+                    )
+                })
+                .collect();
+            sections.sort_unstable_by(|(lhs, _), (rhs, _)| {
+                lhs.start.cmp(&rhs.start).then(lhs.end.cmp(&rhs.end))
+            });
+
+            let addr_to_offset = |addr| {
+                sections
+                    .binary_search_by(|(probe, _)| {
+                        if probe.start > addr {
+                            std::cmp::Ordering::Greater
+                        } else if probe.end <= addr {
+                            std::cmp::Ordering::Less
+                        } else {
+                            std::cmp::Ordering::Equal
+                        }
+                    })
+                    .ok()
+                    .map(|idx| {
+                        let &(ref range, off) = &sections[idx];
+                        (addr - range.start) as usize + off
+                    })
+            };
+
+            let symbols_count_before = self.symbols.len();
+            let load_symbols_timer = std::time::Instant::now();
+            dwarf.load_symbols(&mut self.symbols, addr_to_offset)?;
+            log::trace!(
+                "found {} symbols in DWARF debug information in {}",
+                self.symbols.len() - symbols_count_before,
+                util::DurationDisplay(load_symbols_timer.elapsed())
+            );
+        }
+        self.dwarf = Some(dwarf);
         Ok(())
     }
 
