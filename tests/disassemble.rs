@@ -27,7 +27,7 @@ pub fn disassemble() -> Result<(), Box<dyn Error>> {
 fn cargo_disasm<P: AsRef<Path>>(disasm_dir: P) -> Result<ExitStatus, Box<dyn Error>> {
     let manifest_dir = Path::new(env!("CARGO_MANIFEST_DIR"));
     let mut disasm_exec_name = String::from("cargo-disasm");
-    disasm_exec_name.push_str(std::env::consts::EXE_EXTENSION);
+    disasm_exec_name.push_str(std::env::consts::EXE_SUFFIX);
     let disasm_exec = manifest_dir
         .join("target")
         .join("debug")
