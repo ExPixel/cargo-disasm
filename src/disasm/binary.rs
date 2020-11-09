@@ -4,7 +4,13 @@ use super::strmatch::{distance, Tokenizer};
 use super::symbol::{Symbol, SymbolLang, SymbolSource, SymbolType};
 use crate::error::Error;
 use crate::util;
-use goblin::{archive::Archive, elf::Elf, mach::Mach, pe::PE, Object};
+use goblin::{
+    archive::Archive,
+    elf::Elf,
+    mach::{Mach, MachO},
+    pe::PE,
+    Object,
+};
 use memmap::{Mmap, MmapOptions};
 use std::convert::TryFrom as _;
 use std::fmt;
@@ -170,7 +176,18 @@ impl Binary {
         {
             Object::Elf(elf) => self.parse_elf_object(&elf, sources),
             Object::PE(pe) => self.parse_pe_object(&pe),
-            Object::Mach(mach) => self.parse_mach_object(&mach),
+            Object::Mach(mach) => match mach {
+                goblin::mach::Mach::Fat(multi) => self.parse_mach_object(
+                    &multi.get(0).map_err(|err| {
+                        Error::new(
+                            "failed to get first object from fat Mach binary",
+                            Box::new(err),
+                        )
+                    })?,
+                    sources,
+                ),
+                goblin::mach::Mach::Binary(obj) => self.parse_mach_object(&obj, sources),
+            },
             Object::Archive(archive) => self.parse_archive_object(&archive),
             Object::Unknown(magic) => Err(Error::msg(format!(
                 "failed to parse object with magic value 0x{:X}",
@@ -230,9 +247,7 @@ impl Binary {
         }
 
         // If we're using `auto` for the symbol source and no symbols are found.
-        if sources.is_none() && self.symbols.is_empty() {
-            load_elf_symbols = true;
-        }
+        load_elf_symbols |= sources.is_none() && self.symbols.is_empty();
 
         if load_elf_symbols {
             log::debug!("retrieving symbols from ELF object");
@@ -369,8 +384,67 @@ impl Binary {
         Ok(())
     }
 
-    fn parse_mach_object(&mut self, mach: &Mach) -> Result<(), Error> {
-        Err(Error::msg("mach objects are not currently supported"))
+    fn parse_mach_object(
+        &mut self,
+        mach: &MachO,
+        sources: Option<&[SymbolSource]>,
+    ) -> Result<(), Error> {
+        log::debug!("object type   = Mach-O");
+
+        self.bits = if mach.is_64 {
+            Bits::Bits64
+        } else {
+            Bits::Bits32
+        };
+        self.endian = if mach.little_endian {
+            Endian::Little
+        } else {
+            Endian::Big
+        };
+        self.arch = Arch::from_mach_cpu_types(mach.header.cputype, mach.header.cpusubtype);
+
+        log::debug!("object bits   = {}", self.bits);
+        log::debug!("object endian = {}", self.endian);
+        log::debug!("object arch   = {}", self.arch);
+
+        let load_all_symbols_timer = std::time::Instant::now();
+        let mut load_mach_symbols = false;
+        let mut load_dwarf_symbols = sources.is_none();
+
+        for &source in sources.iter().copied().flatten() {
+            match source {
+                SymbolSource::Mach => load_mach_symbols = true,
+                SymbolSource::Dwarf => load_dwarf_symbols = true,
+                _ => {}
+            }
+        }
+
+        // If we're using `auto` for the symbol source and no symbols are found.
+        load_mach_symbols |= sources.is_none() && self.symbols.is_empty();
+
+        if load_mach_symbols {
+            log::debug!("retrieving symbols from Mach-O object");
+            let symbols_count_before = self.symbols.len();
+            let load_symbols_timer = std::time::Instant::now();
+            self.gather_mach_symbols(mach)?;
+            log::trace!(
+                "found {} symbols in Mach-O object in {}",
+                self.symbols.len() - symbols_count_before,
+                util::DurationDisplay(load_symbols_timer.elapsed())
+            );
+        }
+
+        log::debug!(
+            "found {} total symbols in {}",
+            self.symbols.len(),
+            util::DurationDisplay(load_all_symbols_timer.elapsed())
+        );
+
+        Ok(())
+    }
+
+    fn gather_mach_symbols(&mut self, mach: &MachO) -> Result<(), Error> {
+        Ok(())
     }
 
     fn parse_pe_object(&mut self, pe: &PE) -> Result<(), Error> {
@@ -523,6 +597,19 @@ impl Arch {
             header::EM_X86_64 => Arch::X86_64,
             header::EM_ARM => Arch::Arm,
             header::EM_AARCH64 => Arch::AArch64,
+            _ => Arch::Unknown,
+        }
+    }
+
+    fn from_mach_cpu_types(cpu_type: u32, _cpu_subtype: u32) -> Arch {
+        use goblin::mach::constants::cputype;
+
+        match cpu_type {
+            cputype::CPU_TYPE_ARM => Arch::Arm,
+            cputype::CPU_TYPE_ARM64 => Arch::AArch64,
+            cputype::CPU_TYPE_ARM64_32 => Arch::AArch64,
+            cputype::CPU_TYPE_X86 => Arch::X86,
+            cputype::CPU_TYPE_X86_64 => Arch::X86_64,
             _ => Arch::Unknown,
         }
     }
