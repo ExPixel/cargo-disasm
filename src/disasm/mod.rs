@@ -7,7 +7,7 @@ mod dwarf;
 mod pdb;
 pub mod strmatch;
 
-use self::anal::Jump;
+pub use self::anal::Jump;
 use self::binary::Binary;
 use self::symbol::Symbol;
 use crate::error::Error;
@@ -68,6 +68,14 @@ fn symbolicate_and_internalize_jumps(
                 format!("{}+0x{:x}", symbol.name(), jump_addr - symbol.address()).into();
             disassembly.lines[idx].comments = Some(format!("0x{:x}", jump_addr).into());
             disassembly.lines[idx].is_symbolicated_jump = true;
+
+            if let Some(index) = disassembly
+                .lines
+                .iter()
+                .position(|l| l.contains_addr(jump_addr))
+            {
+                disassembly.lines[idx].jump = Jump::Internal(index);
+            }
         } else if let Some((symbol, offset)) = binary.symbolicate(jump_addr) {
             if offset == 0 {
                 disassembly.lines[idx].operands = symbol.name().into();
@@ -147,6 +155,10 @@ pub struct DisasmLine {
 }
 
 impl DisasmLine {
+    pub fn contains_addr(&self, addr: u64) -> bool {
+        addr >= self.address && addr < self.address + (self.bytes.len() as u64)
+    }
+
     pub fn address(&self) -> u64 {
         self.address
     }
