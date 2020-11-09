@@ -29,7 +29,6 @@ pub fn print_disassembly(
     let clr_oprn = ColorSpec::new(); // operands color
     let mut clr_oprn_sym = clr_oprn.clone(); // operands color (for jumps to symbols)
     clr_oprn_sym.set_fg(Some(Color::Cyan));
-    clr_oprn_sym.set_italic(true);
 
     let mut clr_comm = ColorSpec::new(); // comment color
     clr_comm.set_fg(Some(Color::Yellow));
@@ -55,7 +54,11 @@ pub fn print_disassembly(
         write!(out, "{}", space_sm)?;
 
         if line.is_symbolicated_jump() {
-            out.set_color(&clr_oprn_sym)?;
+            out.set_color(
+                clr_oprn_sym
+                    .set_italic(line.jump().is_external())
+                    .set_bold(line.jump().is_internal()),
+            )?;
         } else {
             out.set_color(&clr_oprn)?;
         }

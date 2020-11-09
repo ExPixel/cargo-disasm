@@ -18,3 +18,15 @@ pub enum Jump {
     /// There is no jump.
     None,
 }
+
+impl Jump {
+    #[inline]
+    pub fn is_internal(&self) -> bool {
+        matches!(self, &Jump::Internal(..))
+    }
+
+    #[inline]
+    pub fn is_external(&self) -> bool {
+        matches!(self, &Jump::External(..))
+    }
+}
