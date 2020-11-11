@@ -450,7 +450,7 @@ impl Binary {
             }
         }
 
-        /// The starting index for Mach symbols in the `symbols` vector.
+        // The starting index for Mach symbols in the `symbols` vector.
         let mach_symbols_idx = self.symbols.len();
 
         // A list of ALL symbol addresses (even non-function symbols).
