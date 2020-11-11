@@ -83,6 +83,15 @@ impl log::Log for AppLogger {
     }
 
     fn log(&self, record: &log::Record) {
+        // goblin is REALLY noisy...so ignore it.
+        if record
+            .module_path()
+            .filter(|m| m.starts_with("goblin::"))
+            .is_some()
+        {
+            return;
+        }
+
         self.write_log(record).expect("failed to write log")
     }
 
