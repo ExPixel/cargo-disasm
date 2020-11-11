@@ -537,12 +537,11 @@ struct BinaryDataInner {
     /// The mapped memory for this binary data.
     mmap: Mmap,
 
-    /// The original path that was used to load this binary data if
-    /// it was provided.
-    path: Option<PathBuf>,
+    /// The original path that was used to load this binary data.
+    path: PathBuf,
 
     /// The file that was used to load this binary data.
-    file: Option<File>,
+    file: File,
 }
 
 /// Reference counted and memory mapped binary data.
@@ -564,33 +563,21 @@ impl BinaryData {
 
     fn from_path_inner(path: &Path) -> io::Result<Self> {
         let file = File::open(path)?;
+        let path = PathBuf::from(path);
 
         unsafe {
             MmapOptions::new().map(&file).map(|mmap| BinaryData {
                 range: 0..mmap.len(),
                 offset: 0,
-                inner: Rc::new(BinaryDataInner {
-                    mmap,
-                    file: Some(file),
-                    path: Some(path.into()),
-                }),
+                inner: Rc::new(BinaryDataInner { mmap, file, path }),
             })
         }
     }
 
-    /// Loads binary data from a file.
-    pub fn from_file(file: &File) -> io::Result<Self> {
-        unsafe {
-            MmapOptions::new().map(&file).map(|mmap| BinaryData {
-                range: 0..mmap.len(),
-                offset: 0,
-                inner: Rc::new(BinaryDataInner {
-                    mmap,
-                    file: file.try_clone().ok(),
-                    path: None,
-                }),
-            })
-        }
+    /// Returns the original path used to load this binary data if one
+    /// was provided.
+    pub fn path(&self) -> &Path {
+        &self.inner.path
     }
 
     pub fn slice<R>(&self, range: R) -> BinaryData

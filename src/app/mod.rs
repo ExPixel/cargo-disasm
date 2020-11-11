@@ -66,13 +66,7 @@ pub fn run() -> Result<(), Box<dyn Error>> {
 
     let binary_path = find_binary_path(&opts)?;
     log::debug!("using binary {}", binary_path.display());
-    let file = File::open(&binary_path).map_err(|err| {
-        DisasmError::new(
-            format!("failed to open `{}`", binary_path.display()),
-            Box::new(err),
-        )
-    })?;
-    let data = BinaryData::from_file(&file).map_err(|err| {
+    let data = BinaryData::from_path(&binary_path).map_err(|err| {
         DisasmError::new(
             format!("failed to load binary `{}`", binary_path.display()),
             Box::new(err),
