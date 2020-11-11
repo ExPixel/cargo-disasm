@@ -50,7 +50,7 @@ cargo disasm --release --symsrc=all foo::bar::baz
 - [ ] use PDB for symbol discovery and line information
 
 **MacOS**  
-- [ ] Mach file disassembly and symbol discovery
+- [x] Mach file disassembly and symbol discovery
 - [ ] use dSYM (DWARF) for symbol discovery and line information
 
 **Linux**  
