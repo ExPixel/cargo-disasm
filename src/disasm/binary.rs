@@ -4,13 +4,7 @@ use super::strmatch::{distance, Tokenizer};
 use super::symbol::{Symbol, SymbolLang, SymbolSource, SymbolType};
 use crate::error::Error;
 use crate::util;
-use goblin::{
-    archive::Archive,
-    elf::Elf,
-    mach::{Mach, MachO},
-    pe::PE,
-    Object,
-};
+use goblin::{archive::Archive, elf::Elf, mach::MachO, pe::PE, Object};
 use memmap::{Mmap, MmapOptions};
 use std::convert::TryFrom as _;
 use std::fmt;
@@ -444,6 +438,70 @@ impl Binary {
     }
 
     fn gather_mach_symbols(&mut self, mach: &MachO) -> Result<(), Error> {
+        use goblin::mach::symbols;
+
+        let mut section_offsets: Vec<(u64, usize)> = Vec::new();
+        for segment in mach.segments.iter() {
+            for s in segment.into_iter() {
+                let (section, _) = s.map_err(|err| {
+                    Error::new("error occurred while getting Mach-O section", Box::new(err))
+                })?;
+                section_offsets.push((section.addr as u64, section.offset as usize));
+            }
+        }
+
+        /// The starting index for Mach symbols in the `symbols` vector.
+        let mach_symbols_idx = self.symbols.len();
+
+        // A list of ALL symbol addresses (even non-function symbols).
+        // This will be used for figuring out where symbols end.
+        let mut symbol_addresses = Vec::<u64>::with_capacity(32);
+
+        let mut symbols_it = mach.symbols();
+        while let Some(Ok((sym_name, sym))) = symbols_it.next() {
+            if sym.n_sect == symbols::NO_SECT as usize || !sym.is_stab() {
+                continue;
+            }
+
+            let sym_addr = sym.n_value;
+            symbol_addresses.push(sym_addr);
+
+            if sym.n_type != MACH_TYPE_FUNC || sym_name.is_empty() {
+                continue;
+            }
+
+            let sym_offset = if let Some((sec_addr, sec_off)) = section_offsets.get(sym.n_sect - 1)
+            {
+                (sym_addr - sec_addr) as usize + sec_off
+            } else {
+                continue;
+            };
+
+            self.symbols.push(Symbol::new(
+                sym_name,
+                sym_addr,
+                sym_offset as usize,
+                0, // this is fixed later
+                SymbolType::Function,
+                SymbolSource::Mach,
+                SymbolLang::Unknown,
+            ));
+        }
+
+        symbol_addresses.sort_unstable();
+        symbol_addresses.dedup();
+
+        // Figure out where symbols end by using the starting address of the next symbol.
+        for symbol in &mut self.symbols[mach_symbols_idx..] {
+            if let Ok(idx) = symbol_addresses.binary_search(&symbol.address()) {
+                if let Some(next_addr) = symbol_addresses.get(idx + 1) {
+                    symbol.set_size((next_addr - symbol.address()) as usize);
+                    continue;
+                }
+            };
+            symbol.set_address(0);
+        }
+
         Ok(())
     }
 
@@ -715,3 +773,5 @@ const DWARF_SECTIONS: &[&str] = &[
     ".debug_ranges",
     ".debug_rnglists",
 ];
+
+const MACH_TYPE_FUNC: u8 = 0x24;

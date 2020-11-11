@@ -107,6 +107,14 @@ impl Symbol {
     pub fn type_(&self) -> SymbolType {
         self.type_
     }
+
+    pub(crate) fn set_address(&mut self, new_address: u64) {
+        self.addr = new_address;
+    }
+
+    pub(crate) fn set_size(&mut self, new_size: usize) {
+        self.blen = new_size;
+    }
 }
 
 #[derive(Copy, Clone, PartialEq, Eq)]
