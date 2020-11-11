@@ -1,4 +1,7 @@
 mod app;
+mod disasm;
+mod error;
+mod util;
 
 use std::error::Error;
 

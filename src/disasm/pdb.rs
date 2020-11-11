@@ -1,4 +1,4 @@
-use crate::binary::BinaryData;
+use crate::disasm::binary::BinaryData;
 use ::pdb::PDB;
 
 pub struct PDBInfo {

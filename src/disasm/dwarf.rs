@@ -1,6 +1,6 @@
-use crate::binary::BinaryData;
+use crate::disasm::binary::BinaryData;
+use crate::disasm::symbol::{Symbol, SymbolLang, SymbolSource, SymbolType};
 use crate::error::Error;
-use crate::symbol::{Symbol, SymbolLang, SymbolSource, SymbolType};
 use crate::util;
 use gimli::{read::EndianReader, Dwarf, RunTimeEndian};
 use once_cell::unsync::OnceCell;

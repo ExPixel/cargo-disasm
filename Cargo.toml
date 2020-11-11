@@ -20,10 +20,6 @@ bench = false
 path = "src/main.rs"
 name = "cargo-disasm"
 
-[lib]
-path = "src/lib.rs"
-name = "disasm"
-
 [dependencies]
 
 # Binary Crate Dependencies

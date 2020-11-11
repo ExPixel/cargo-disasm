@@ -1,4 +1,4 @@
-use disasm::{symbol::Symbol, Disassembly};
+use crate::disasm::{self, symbol::Symbol, Disassembly};
 use std::error::Error;
 use termcolor::{Color, ColorSpec, WriteColor};
 

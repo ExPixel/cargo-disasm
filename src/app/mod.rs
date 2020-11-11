@@ -2,10 +2,16 @@ pub mod cli;
 pub mod logging;
 mod printer;
 
+use crate::{
+    disasm::{
+        self,
+        binary::{Binary, BinaryData},
+        symbol::SymbolSource,
+    },
+    error::Error as DisasmError,
+};
 use clap::Clap as _;
 use cli::Opts;
-use disasm::binary::{Binary, BinaryData};
-use disasm::error::Error as DisasmError;
 use logging::AppLogger;
 use std::error::Error;
 use std::path::PathBuf;
@@ -75,7 +81,6 @@ pub fn run() -> Result<(), Box<dyn Error>> {
     let mut sources = Vec::new();
     let mut sources_auto = false;
     for s in opts.symbol_sources.iter() {
-        use disasm::symbol::SymbolSource;
         if s.eq_ignore_ascii_case("all") {
             // object file formats
             sources.push(SymbolSource::Elf);
@@ -126,7 +131,7 @@ pub fn run() -> Result<(), Box<dyn Error>> {
         let disassembly = disasm::disasm(&bin, symbol)?;
         let mut stdout = StandardStream::stdout(color_choice);
         printer::print_disassembly(&mut stdout, symbol, &disassembly)
-            .map_err(|err| disasm::Error::new("error occurred while printing disassembly", err))?;
+            .map_err(|err| DisasmError::new("error occurred while printing disassembly", err))?;
     } else {
         return Err(format!("no symbol matching `{}` was found", opts.symbol).into());
     }
