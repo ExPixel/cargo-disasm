@@ -16,8 +16,8 @@ pub fn disassemble() -> Result<(), Box<dyn Error>> {
 
     let disasm_test_project = cargo_disasm(&test_project_dir)?;
 
-    // FIXME for now this is the only one I check.
-    if cfg!(target_os = "linux") && cfg!(target_arch = "x86_64") {
+    // FIXME ignore windows for now.
+    if !cfg!(target_os = "windows") {
         assert!(disasm_test_project.success());
     }
 
