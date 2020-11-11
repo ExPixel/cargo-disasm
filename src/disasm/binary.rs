@@ -244,7 +244,7 @@ impl Binary {
         load_elf_symbols |= sources.is_none() && self.symbols.is_empty();
 
         if load_elf_symbols {
-            log::debug!("retrieving symbols from ELF object");
+            log::info!("retrieving symbols from ELF object");
             let symbols_count_before = self.symbols.len();
             let load_symbols_timer = std::time::Instant::now();
             self.gather_elf_symbols(elf)?;
@@ -279,7 +279,7 @@ impl Binary {
         let dwarf = Box::new(DwarfInfo::new(loader, sup_loader)?);
 
         if load_dwarf_symbols {
-            log::debug!("retrieving symbols from DWARF debug information");
+            log::info!("retrieving symbols from DWARF debug information");
 
             let mut sections: Vec<(std::ops::Range<u64>, usize)> = elf
                 .section_headers
@@ -417,7 +417,7 @@ impl Binary {
         load_mach_symbols |= sources.is_none() && self.symbols.is_empty();
 
         if load_mach_symbols {
-            log::debug!("retrieving symbols from Mach-O object");
+            log::info!("retrieving symbols from Mach-O object");
             let symbols_count_before = self.symbols.len();
             let load_symbols_timer = std::time::Instant::now();
             self.gather_mach_symbols(mach)?;
