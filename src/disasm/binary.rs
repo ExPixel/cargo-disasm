@@ -10,6 +10,7 @@ use std::convert::TryFrom as _;
 use std::fmt;
 use std::fs::File;
 use std::io::{self, Read, Seek, SeekFrom};
+use std::path::{Path, PathBuf};
 use std::rc::Rc;
 
 pub struct Binary {
@@ -532,6 +533,18 @@ impl Binary {
     }
 }
 
+struct BinaryDataInner {
+    /// The mapped memory for this binary data.
+    mmap: Mmap,
+
+    /// The original path that was used to load this binary data if
+    /// it was provided.
+    path: Option<PathBuf>,
+
+    /// The file that was used to load this binary data.
+    file: Option<File>,
+}
+
 /// Reference counted and memory mapped binary data.
 #[derive(Clone)]
 pub struct BinaryData {
@@ -541,17 +554,41 @@ pub struct BinaryData {
     /// The current offset of the binary data that is being read.
     offset: usize,
 
-    inner: Rc<Mmap>,
+    inner: Rc<BinaryDataInner>,
 }
 
 impl BinaryData {
+    pub fn from_path<P: AsRef<Path>>(path: P) -> io::Result<Self> {
+        Self::from_path_inner(path.as_ref())
+    }
+
+    fn from_path_inner(path: &Path) -> io::Result<Self> {
+        let file = File::open(path)?;
+
+        unsafe {
+            MmapOptions::new().map(&file).map(|mmap| BinaryData {
+                range: 0..mmap.len(),
+                offset: 0,
+                inner: Rc::new(BinaryDataInner {
+                    mmap,
+                    file: Some(file),
+                    path: Some(path.into()),
+                }),
+            })
+        }
+    }
+
     /// Loads binary data from a file.
     pub fn from_file(file: &File) -> io::Result<Self> {
         unsafe {
-            MmapOptions::new().map(&file).map(|m| BinaryData {
-                range: 0..m.len(),
+            MmapOptions::new().map(&file).map(|mmap| BinaryData {
+                range: 0..mmap.len(),
                 offset: 0,
-                inner: Rc::new(m),
+                inner: Rc::new(BinaryDataInner {
+                    mmap,
+                    file: file.try_clone().ok(),
+                    path: None,
+                }),
             })
         }
     }
@@ -588,7 +625,7 @@ impl BinaryData {
 impl std::fmt::Debug for BinaryData {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         f.debug_struct("BinaryData")
-            .field("len", &self.inner.len())
+            .field("len", &self.inner.mmap.len())
             .finish()
     }
 }
@@ -597,13 +634,13 @@ impl std::ops::Deref for BinaryData {
     type Target = [u8];
 
     fn deref(&self) -> &Self::Target {
-        &self.inner[self.range.clone()]
+        &self.inner.mmap[self.range.clone()]
     }
 }
 
 impl Read for BinaryData {
     fn read(&mut self, buf: &mut [u8]) -> io::Result<usize> {
-        let mut slice: &[u8] = &*self.inner;
+        let mut slice: &[u8] = &*self.inner.mmap;
 
         let len = std::cmp::min(buf.len(), slice.len() - self.offset);
         if len == 0 {
