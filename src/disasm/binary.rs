@@ -2,8 +2,8 @@ use super::dwarf::DwarfInfo;
 use super::pdb::PDBInfo;
 use super::strmatch::{distance, Tokenizer};
 use super::symbol::{Symbol, SymbolLang, SymbolSource, SymbolType};
-use crate::error::Error;
 use crate::util;
+use anyhow::Context as _;
 use goblin::{archive::Archive, elf::Elf, mach::MachO, pe::PE, Object};
 use memmap::{Mmap, MmapOptions};
 use std::convert::TryFrom as _;
@@ -32,7 +32,7 @@ pub struct Binary {
 }
 
 impl Binary {
-    pub fn new(data: BinaryData, sources: Option<&[SymbolSource]>) -> Result<Binary, Error> {
+    pub fn new(data: BinaryData, sources: Option<&[SymbolSource]>) -> anyhow::Result<Binary> {
         let mut binary = Binary {
             data,
             dwarf: None,
@@ -164,30 +164,25 @@ impl Binary {
         self.bits
     }
 
-    fn parse_object(&mut self, sources: Option<&[SymbolSource]>) -> Result<(), Error> {
+    fn parse_object(&mut self, sources: Option<&[SymbolSource]>) -> anyhow::Result<()> {
         let data = self.data.clone();
-        match Object::parse(&data)
-            .map_err(|err| Error::new("failed to parse object", Box::new(err)))?
-        {
+        match Object::parse(&data).context("failed to parse object")? {
             Object::Elf(elf) => self.parse_elf_object(&elf, sources),
             Object::PE(pe) => self.parse_pe_object(&pe),
             Object::Mach(mach) => match mach {
                 goblin::mach::Mach::Fat(multi) => self.parse_mach_object(
-                    &multi.get(0).map_err(|err| {
-                        Error::new(
-                            "failed to get first object from fat Mach binary",
-                            Box::new(err),
-                        )
-                    })?,
+                    &multi
+                        .get(0)
+                        .context("failed to get first object from fat Mach binary")?,
                     sources,
                 ),
                 goblin::mach::Mach::Binary(obj) => self.parse_mach_object(&obj, sources),
             },
             Object::Archive(archive) => self.parse_archive_object(&archive),
-            Object::Unknown(magic) => Err(Error::msg(format!(
+            Object::Unknown(magic) => Err(anyhow::anyhow!(
                 "failed to parse object with magic value 0x{:X}",
                 magic
-            ))),
+            )),
         }
     }
 
@@ -195,7 +190,7 @@ impl Binary {
         &mut self,
         elf: &Elf,
         sources: Option<&[SymbolSource]>,
-    ) -> Result<(), Error> {
+    ) -> anyhow::Result<()> {
         use goblin::elf::header;
 
         log::debug!("object type   = ELF");
@@ -204,7 +199,7 @@ impl Binary {
         self.endian = Endian::from(
             elf.header
                 .endianness()
-                .map_err(|e| Error::new("failed to identify ELF endianness", Box::new(e)))?,
+                .context("failed to identify ELF endianness")?,
         );
         self.arch = Arch::from_elf_machine(elf.header.e_machine);
 
@@ -265,7 +260,7 @@ impl Binary {
         Ok(())
     }
 
-    fn parse_elf_dwarf(&mut self, elf: &Elf, load_dwarf_symbols: bool) -> Result<(), Error> {
+    fn parse_elf_dwarf(&mut self, elf: &Elf, load_dwarf_symbols: bool) -> anyhow::Result<()> {
         use gimli::EndianReader;
         use gimli::RunTimeEndian;
 
@@ -328,7 +323,7 @@ impl Binary {
         Ok(())
     }
 
-    fn gather_elf_symbols(&mut self, elf: &Elf) -> Result<(), Error> {
+    fn gather_elf_symbols(&mut self, elf: &Elf) -> anyhow::Result<()> {
         for sym in elf.syms.iter().filter(|sym| sym.is_function()) {
             // FIXME handle symbols with a size of 0 (usually external symbols).
             if sym.st_size == 0 {
@@ -341,7 +336,7 @@ impl Binary {
                 .strtab
                 .get(sym.st_name)
                 .transpose()
-                .map_err(|e| Error::new("failed to get symbol name", Box::new(e)))?
+                .context("failed to get ELF symbol name")?
             {
                 name
             } else {
@@ -350,10 +345,11 @@ impl Binary {
 
             let (section_offset, section_addr) = {
                 let sym_section = elf.section_headers.get(sym.st_shndx).ok_or_else(|| {
-                    Error::msg(format!(
+                    anyhow::anyhow!(
                         "no matching section header for {} (header-idx: {})",
-                        sym_name, sym.st_shndx
-                    ))
+                        sym_name,
+                        sym.st_shndx
+                    )
                 })?;
                 (sym_section.sh_offset, sym_section.sh_addr)
             };
@@ -383,7 +379,7 @@ impl Binary {
         &mut self,
         mach: &MachO,
         sources: Option<&[SymbolSource]>,
-    ) -> Result<(), Error> {
+    ) -> anyhow::Result<()> {
         log::debug!("object type   = Mach-O");
 
         self.bits = if mach.is_64 {
@@ -438,15 +434,13 @@ impl Binary {
         Ok(())
     }
 
-    fn gather_mach_symbols(&mut self, mach: &MachO) -> Result<(), Error> {
+    fn gather_mach_symbols(&mut self, mach: &MachO) -> anyhow::Result<()> {
         use goblin::mach::symbols;
 
         let mut section_offsets: Vec<(u64, usize)> = Vec::new();
         for segment in mach.segments.iter() {
             for s in segment.into_iter() {
-                let (section, _) = s.map_err(|err| {
-                    Error::new("error occurred while getting Mach-O section", Box::new(err))
-                })?;
+                let (section, _) = s.context("error occured while getting Mach-O section")?;
                 section_offsets.push((section.addr as u64, section.offset as usize));
             }
         }
@@ -506,21 +500,23 @@ impl Binary {
         Ok(())
     }
 
-    fn parse_pe_object(&mut self, pe: &PE) -> Result<(), Error> {
-        Err(Error::msg("PE objects are not currently supported"))
+    fn parse_pe_object(&mut self, pe: &PE) -> anyhow::Result<()> {
+        Err(anyhow::anyhow!("PE objects are not currently supported"))
     }
 
-    fn parse_archive_object(&mut self, archive: &Archive) -> Result<(), Error> {
-        Err(Error::msg("archive objects are not currently supported"))
+    fn parse_archive_object(&mut self, archive: &Archive) -> anyhow::Result<()> {
+        Err(anyhow::anyhow!(
+            "archive objects are not currently supported"
+        ))
     }
 
-    fn get_elf_section_data_by_name(&self, elf: &Elf, name: &str) -> Result<BinaryData, Error> {
+    fn get_elf_section_data_by_name(&self, elf: &Elf, name: &str) -> anyhow::Result<BinaryData> {
         for section in elf.section_headers.iter() {
             let section_name = elf
                 .shdr_strtab
                 .get(section.sh_name)
                 .transpose()
-                .map_err(|err| Error::new("failed to retrieve section name", Box::new(err)))?;
+                .context("failed to retrieve ELF section name")?;
 
             if section_name == Some(name) {
                 let start = section.sh_offset as usize;
@@ -557,20 +553,24 @@ pub struct BinaryData {
 }
 
 impl BinaryData {
-    pub fn from_path<P: AsRef<Path>>(path: P) -> io::Result<Self> {
+    pub fn from_path<P: AsRef<Path>>(path: P) -> anyhow::Result<Self> {
         Self::from_path_inner(path.as_ref())
     }
 
-    fn from_path_inner(path: &Path) -> io::Result<Self> {
-        let file = File::open(path)?;
+    fn from_path_inner(path: &Path) -> anyhow::Result<Self> {
+        let file = File::open(path)
+            .with_context(|| format!("failed to open file at path `{}`", path.display()))?;
         let path = PathBuf::from(path);
 
         unsafe {
-            MmapOptions::new().map(&file).map(|mmap| BinaryData {
-                range: 0..mmap.len(),
-                offset: 0,
-                inner: Rc::new(BinaryDataInner { mmap, file, path }),
-            })
+            MmapOptions::new()
+                .map(&file)
+                .map(|mmap| BinaryData {
+                    range: 0..mmap.len(),
+                    offset: 0,
+                    inner: Rc::new(BinaryDataInner { mmap, file, path }),
+                })
+                .map_err(|err| err.into())
         }
     }
 

@@ -10,10 +10,10 @@ pub mod strmatch;
 pub use self::anal::Jump;
 use self::binary::Binary;
 use self::symbol::Symbol;
-use crate::error::Error;
+use anyhow::Context as _;
 use capstone::Capstone;
 
-pub fn disasm(binary: &Binary, symbol: &Symbol) -> Result<Disassembly, Error> {
+pub fn disasm(binary: &Binary, symbol: &Symbol) -> anyhow::Result<Disassembly> {
     let caps = capstone_for_binary(binary)?;
     let mut disassembly = Disassembly::new();
     disasm_symbol_lines(&caps, binary, symbol, &mut disassembly)?;
@@ -25,13 +25,12 @@ fn disasm_symbol_lines(
     binary: &Binary,
     symbol: &Symbol,
     disassembly: &mut Disassembly,
-) -> Result<(), Error> {
+) -> anyhow::Result<()> {
     for insn in caps.disasm_iter(
         &binary.data()[symbol.offset()..symbol.end()],
         symbol.address(),
     ) {
-        let insn =
-            insn.map_err(|err| Error::new("failed to disassemble instruction", Box::new(err)))?;
+        let insn = insn.context("failed to disassemble instruction")?;
         let jump = anal::identify_jump_target(insn, caps);
         let line = DisasmLine {
             address: insn.address(),
@@ -90,12 +89,12 @@ fn symbolicate_and_internalize_jumps(
 }
 
 /// Creates a Capstone instance for the binary.
-fn capstone_for_binary(binary: &Binary) -> Result<Capstone, Error> {
+fn capstone_for_binary(binary: &Binary) -> anyhow::Result<Capstone> {
     use binary::Arch as BinArch;
     use capstone::{Arch as CapArch, Mode};
 
     let capstone_arch = match binary.arch() {
-        BinArch::Unknown => return Err(Error::msg("unknown binary architecture")),
+        BinArch::Unknown => return Err(anyhow::anyhow!("unknown binary architecture")),
         BinArch::X86 => CapArch::X86,
         BinArch::X86_64 => CapArch::X86,
         BinArch::Arm => CapArch::Arm,
@@ -117,10 +116,9 @@ fn capstone_for_binary(binary: &Binary) -> Result<Capstone, Error> {
         mode |= Mode::Bits64;
     }
 
-    let mut caps = Capstone::open(capstone_arch, mode)
-        .map_err(|err| Error::new("failed to initialize capstone", Box::new(err)))?;
+    let mut caps = Capstone::open(capstone_arch, mode).context("failed to initialize Capstone")?;
     caps.set_details_enabled(true)
-        .map_err(|err| Error::new("failed to enable capstone detail mode", Box::new(err)))?;
+        .context("failed to enable Capstone detail mode")?;
 
     Ok(caps)
 }

@@ -2,18 +2,15 @@ pub mod cli;
 pub mod logging;
 mod printer;
 
-use crate::{
-    disasm::{
-        self,
-        binary::{Binary, BinaryData},
-        symbol::SymbolSource,
-    },
-    error::Error as DisasmError,
+use crate::disasm::{
+    self,
+    binary::{Binary, BinaryData},
+    symbol::SymbolSource,
 };
+use anyhow::Context as _;
 use clap::Clap as _;
 use cli::Opts;
 use logging::AppLogger;
-use std::error::Error;
 use std::path::PathBuf;
 use termcolor::ColorChoice;
 use termcolor::StandardStream;
@@ -33,9 +30,7 @@ fn parse_options() -> Opts {
     }
 }
 
-pub fn run() -> Result<(), Box<dyn Error>> {
-    use std::fs::File;
-
+pub fn run() -> anyhow::Result<()> {
     let opts = parse_options();
 
     unsafe { AppLogger::instance().set_level(opts.log_level_filter()) };
@@ -66,12 +61,8 @@ pub fn run() -> Result<(), Box<dyn Error>> {
 
     let binary_path = find_binary_path(&opts)?;
     log::debug!("using binary {}", binary_path.display());
-    let data = BinaryData::from_path(&binary_path).map_err(|err| {
-        DisasmError::new(
-            format!("failed to load binary `{}`", binary_path.display()),
-            Box::new(err),
-        )
-    })?;
+    let data = BinaryData::from_path(&binary_path)
+        .with_context(|| format!("failed to load binary `{}`", binary_path.display()))?;
     let mut sources = Vec::new();
     let mut sources_auto = false;
     for s in opts.symbol_sources.iter() {
@@ -111,7 +102,7 @@ pub fn run() -> Result<(), Box<dyn Error>> {
             sources.push(SymbolSource::Dwarf);
             sources.push(SymbolSource::Pdb);
         } else {
-            return Err(format!("{} is not a valid symbol source", s).into());
+            return Err(anyhow::anyhow!("{} is not a valid symbol source", s));
         }
     }
     sources_auto |= sources.is_empty();
@@ -125,16 +116,19 @@ pub fn run() -> Result<(), Box<dyn Error>> {
         let disassembly = disasm::disasm(&bin, symbol)?;
         let mut stdout = StandardStream::stdout(color_choice);
         printer::print_disassembly(&mut stdout, symbol, &disassembly)
-            .map_err(|err| DisasmError::new("error occurred while printing disassembly", err))?;
+            .context("error occured while printing disassembly")?;
     } else {
-        return Err(format!("no symbol matching `{}` was found", opts.symbol).into());
+        return Err(anyhow::anyhow!(
+            "no symbol matching `{}` was found",
+            opts.symbol
+        ));
     }
 
     Ok(())
 }
 
 /// Use options to find the binary to search for the symbol in.
-fn find_binary_path(opts: &Opts) -> Result<PathBuf, Box<dyn Error>> {
+fn find_binary_path(opts: &Opts) -> anyhow::Result<PathBuf> {
     use cargo_metadata::{MetadataCommand, Package, Target};
     if let Some(ref b) = opts.binary_path {
         return Ok(b.clone());
@@ -145,9 +139,9 @@ fn find_binary_path(opts: &Opts) -> Result<PathBuf, Box<dyn Error>> {
     if let Some(ref m) = opts.manifest_path {
         cmd.manifest_path(m);
     }
-    let metadata = cmd.exec().map_err(|err| {
-        DisasmError::new("error occurred while running cargo_metadata", Box::new(err))
-    })?;
+    let metadata = cmd
+        .exec()
+        .context("error occurred while running cargo_metadata")?;
 
     let match_package = |package: &Package| {
         if !metadata.workspace_members.contains(&package.id) {
@@ -181,7 +175,7 @@ fn find_binary_path(opts: &Opts) -> Result<PathBuf, Box<dyn Error>> {
         .collect::<Vec<(&Package, &Target)>>();
 
     if found_targets.is_empty() {
-        return Err("no matching targets were found".into());
+        return Err(anyhow::anyhow!("no matching targets were found"));
     }
     if found_targets.len() > 1 {
         let mut s = String::from("multiple matching targets were found:");
@@ -193,7 +187,7 @@ fn find_binary_path(opts: &Opts) -> Result<PathBuf, Box<dyn Error>> {
                 package.name
             ));
         }
-        return Err(s.into());
+        return Err(anyhow::anyhow!(s));
     }
 
     let (_package, target) = found_targets.into_iter().next().unwrap();

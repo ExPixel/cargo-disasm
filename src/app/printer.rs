@@ -1,12 +1,11 @@
 use crate::disasm::{self, symbol::Symbol, Disassembly};
-use std::error::Error;
 use termcolor::{Color, ColorSpec, WriteColor};
 
 pub fn print_disassembly(
     out: &mut dyn WriteColor,
     sym: &Symbol,
     dis: &Disassembly,
-) -> Result<(), Box<dyn Error>> {
+) -> anyhow::Result<()> {
     let measure = disasm::display::measure(dis);
 
     let space_sm = Spacing(2);

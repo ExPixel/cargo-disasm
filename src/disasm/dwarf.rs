@@ -1,7 +1,7 @@
 use crate::disasm::binary::BinaryData;
 use crate::disasm::symbol::{Symbol, SymbolLang, SymbolSource, SymbolType};
-use crate::error::Error;
 use crate::util;
+use anyhow::Context as _;
 use gimli::{read::EndianReader, Dwarf, RunTimeEndian};
 use once_cell::unsync::OnceCell;
 use std::ops::Range;
@@ -21,10 +21,10 @@ pub struct DwarfInfo {
 }
 
 impl DwarfInfo {
-    pub fn new<L, S>(loader: L, sup_loader: S) -> Result<DwarfInfo, Error>
+    pub fn new<L, S>(loader: L, sup_loader: S) -> anyhow::Result<DwarfInfo>
     where
-        L: Fn(gimli::SectionId) -> Result<BinaryDataReader, Error>,
-        S: Fn(gimli::SectionId) -> Result<BinaryDataReader, Error>,
+        L: Fn(gimli::SectionId) -> anyhow::Result<BinaryDataReader>,
+        S: Fn(gimli::SectionId) -> anyhow::Result<BinaryDataReader>,
     {
         Ok(DwarfInfo {
             dwarf: gimli::Dwarf::load(loader, sup_loader)?,
@@ -40,14 +40,14 @@ impl DwarfInfo {
         &self,
         symbols: &mut Vec<Symbol>,
         mut addr_to_offset: F,
-    ) -> Result<(), Error>
+    ) -> anyhow::Result<()>
     where
         F: FnMut(u64) -> Option<usize>,
     {
         let mut unit_headers = self.dwarf.units();
         while let Some(unit_header) = unit_headers
             .next()
-            .map_err(|err| Error::new("failed to read DWARF compilation unit", Box::new(err)))?
+            .context("failed to read DWARF compilation unit")?
         {
             let unit = if let Ok(unit) = self.dwarf.unit(unit_header) {
                 unit
@@ -56,30 +56,7 @@ impl DwarfInfo {
             };
 
             self.load_symbols_from_unit(&unit, symbols, &mut addr_to_offset)
-                .map_err(|err| {
-                    Error::new(
-                        "failed to load symbols from compilation unit",
-                        Box::new(err),
-                    )
-                })?;
-
-            // let mut entries = unit.entries();
-            // while let Some((_, entry)) = entries.next_dfs().map_err(|err| {
-            //     Error::new(
-            //         "failed to read DWARF entry from compilation unit",
-            //         Box::new(err),
-            //     )
-            // })? {
-            //     Self::symbol_from_entry(entry, &unit, &self.dwarf, &mut addr_to_offset)
-            //         .map_err(|err| {
-            //             Error::new("failed to process compilation unit entry", Box::new(err))
-            //         })
-            //         .map(|sym| {
-            //             if let Some(sym) = sym {
-            //                 symbols.push(sym)
-            //             }
-            //         })?;
-            // }
+                .context("failed to load symbols from compilation unit")?;
         }
         Ok(())
     }
@@ -194,7 +171,7 @@ impl DwarfInfo {
 
     /// This will load the compilation units and their addresses ranges
     /// if it has not been done already.
-    pub fn ensure_compilation_units(&mut self) -> Result<(), Error> {
+    pub fn ensure_compilation_units(&mut self) -> anyhow::Result<()> {
         if self.compilation_units_initialized {
             return Ok(());
         }
@@ -205,7 +182,7 @@ impl DwarfInfo {
             &mut self.compilation_units,
             &mut self.compilation_unit_ranges,
         )
-        .map_err(|err| Error::new("error while finding compilation units", Box::new(err)))
+        .context("error while finding compilation units")
     }
 
     #[cold]
