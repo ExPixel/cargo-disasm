@@ -4,7 +4,7 @@ mod printer;
 
 use crate::disasm::{
     self,
-    binary::{Binary, BinaryData},
+    binary::{Binary, BinaryData, SearchOptions},
     symbol::SymbolSource,
 };
 use anyhow::Context as _;
@@ -108,8 +108,9 @@ pub fn run() -> anyhow::Result<()> {
     sources_auto |= sources.is_empty();
     sources.sort_unstable();
     sources.dedup();
-    let sources = if sources_auto { None } else { Some(sources) };
-    let bin = Binary::new(data, sources.as_deref())?;
+
+    let mut search_options = SearchOptions { sources: &sources };
+    let bin = Binary::new(data, search_options)?;
 
     // FIXME temporary test code
     if let Some(symbol) = bin.fuzzy_find_symbol(&opts.symbol) {

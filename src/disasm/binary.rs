@@ -32,7 +32,7 @@ pub struct Binary {
 }
 
 impl Binary {
-    pub fn new(data: BinaryData, sources: Option<&[SymbolSource]>) -> anyhow::Result<Binary> {
+    pub fn new(data: BinaryData, options: SearchOptions) -> anyhow::Result<Binary> {
         let mut binary = Binary {
             data,
             dwarf: None,
@@ -45,7 +45,7 @@ impl Binary {
             symbols: Vec::new(),
         };
 
-        binary.parse_object(sources).map(|_| {
+        binary.parse_object(options).map(|_| {
             let symbol_sort_timer = std::time::Instant::now();
             binary.symbols.sort_unstable_by(|lhs, rhs| {
                 lhs.address()
@@ -164,19 +164,19 @@ impl Binary {
         self.bits
     }
 
-    fn parse_object(&mut self, sources: Option<&[SymbolSource]>) -> anyhow::Result<()> {
+    fn parse_object(&mut self, options: SearchOptions) -> anyhow::Result<()> {
         let data = self.data.clone();
         match Object::parse(&data).context("failed to parse object")? {
-            Object::Elf(elf) => self.parse_elf_object(&elf, sources),
+            Object::Elf(elf) => self.parse_elf_object(&elf, options),
             Object::PE(pe) => self.parse_pe_object(&pe),
             Object::Mach(mach) => match mach {
                 goblin::mach::Mach::Fat(multi) => self.parse_mach_object(
                     &multi
                         .get(0)
                         .context("failed to get first object from fat Mach binary")?,
-                    sources,
+                    options,
                 ),
-                goblin::mach::Mach::Binary(obj) => self.parse_mach_object(&obj, sources),
+                goblin::mach::Mach::Binary(obj) => self.parse_mach_object(&obj, options),
             },
             Object::Archive(archive) => self.parse_archive_object(&archive),
             Object::Unknown(magic) => Err(anyhow::anyhow!(
@@ -186,11 +186,7 @@ impl Binary {
         }
     }
 
-    fn parse_elf_object(
-        &mut self,
-        elf: &Elf,
-        sources: Option<&[SymbolSource]>,
-    ) -> anyhow::Result<()> {
+    fn parse_elf_object(&mut self, elf: &Elf, options: SearchOptions) -> anyhow::Result<()> {
         use goblin::elf::header;
 
         log::debug!("object type   = ELF");
@@ -210,8 +206,8 @@ impl Binary {
         let load_all_symbols_timer = std::time::Instant::now();
 
         let mut load_elf_symbols = false;
-        let mut load_dwarf_symbols = sources.is_none(); // `auto` makes this true
-        for &source in sources.iter().copied().flatten() {
+        let mut load_dwarf_symbols = options.sources.is_empty(); // `auto` makes this true
+        for &source in options.sources.iter() {
             match source {
                 SymbolSource::Elf => load_elf_symbols = true,
                 SymbolSource::Dwarf => load_dwarf_symbols = true,
@@ -237,7 +233,7 @@ impl Binary {
         }
 
         // If we're using `auto` for the symbol source and no symbols are found.
-        load_elf_symbols |= sources.is_none() && self.symbols.is_empty();
+        load_elf_symbols |= options.sources.is_empty() && self.symbols.is_empty();
 
         if load_elf_symbols {
             log::info!("retrieving symbols from ELF object");
@@ -375,11 +371,7 @@ impl Binary {
         Ok(())
     }
 
-    fn parse_mach_object(
-        &mut self,
-        mach: &MachO,
-        sources: Option<&[SymbolSource]>,
-    ) -> anyhow::Result<()> {
+    fn parse_mach_object(&mut self, mach: &MachO, options: SearchOptions) -> anyhow::Result<()> {
         log::debug!("object type   = Mach-O");
 
         self.bits = if mach.is_64 {
@@ -400,9 +392,9 @@ impl Binary {
 
         let load_all_symbols_timer = std::time::Instant::now();
         let mut load_mach_symbols = false;
-        let mut load_dwarf_symbols = sources.is_none();
+        let mut load_dwarf_symbols = options.sources.is_empty();
 
-        for &source in sources.iter().copied().flatten() {
+        for &source in options.sources.iter() {
             match source {
                 SymbolSource::Mach => load_mach_symbols = true,
                 SymbolSource::Dwarf => load_dwarf_symbols = true,
@@ -411,7 +403,7 @@ impl Binary {
         }
 
         // If we're using `auto` for the symbol source and no symbols are found.
-        load_mach_symbols |= sources.is_none() && self.symbols.is_empty();
+        load_mach_symbols |= options.sources.is_empty() && self.symbols.is_empty();
 
         if load_mach_symbols {
             log::info!("retrieving symbols from Mach-O object");
@@ -799,3 +791,18 @@ const DWARF_SECTIONS: &[&str] = &[
 ];
 
 const MACH_TYPE_FUNC: u8 = 0x24;
+
+pub struct SearchOptions<'a> {
+    pub sources: &'a [SymbolSource],
+    // FIXME implement these
+    // /// Path to an object file containing DWARF debug information.
+    // /// Used for ELF and Mach-O object files.
+    // pub dwarf_path: Option<&'a Path>,
+
+    // /// The path to the dSYM directory.
+    // /// Used for Mach-O object files.
+    // pub dsym_path: Option<&'a Path>,
+
+    // /// Path to a PDB file used for PE object files.
+    // pub pdb_path: Option<&'a Path>,
+}

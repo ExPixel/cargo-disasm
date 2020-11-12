@@ -1,6 +1,7 @@
+#[macro_use]
+mod util;
 mod app;
 mod disasm;
-mod util;
 
 fn main() {
     log::set_logger(app::logging::AppLogger::init()).expect("failed to set logger");
