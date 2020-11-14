@@ -1,5 +1,8 @@
+use crate::disasm::strmatch::Tokenizer;
 use crate::disasm::{self, symbol::Symbol, Disassembly};
 use termcolor::{Color, ColorSpec, WriteColor};
+
+const MAX_OPERAND_LEN: usize = 72;
 
 pub fn print_disassembly(
     out: &mut dyn WriteColor,
@@ -13,8 +16,14 @@ pub fn print_disassembly(
 
     let max_addr = measure.max_address_width_hex(); // addr length
     let max_mnem = measure.max_mnemonic_len(); // mnemonic length
-    let max_oprn = measure.max_operands_len(); // operand length
+    let mut max_oprn = measure.max_operands_len(); // operand length
     let max_comm = measure.max_comments_len(); // comment length
+
+    let oprn_indent = Spacing(space_sm.0 + max_addr + space_lg.0 + max_mnem + space_sm.0);
+
+    if max_oprn > MAX_OPERAND_LEN {
+        max_oprn = MAX_OPERAND_LEN;
+    }
 
     let clr_norm = ColorSpec::new(); // normal color
 
@@ -52,26 +61,70 @@ pub fn print_disassembly(
         out.set_color(&clr_norm)?;
         write!(out, "{}", space_sm)?;
 
-        if line.is_symbolicated_jump() {
-            out.set_color(
-                clr_oprn_sym
-                    .set_italic(line.jump().is_external())
-                    .set_bold(line.jump().is_internal()),
-            )?;
+        let oprn_color = if line.is_symbolicated_jump() {
+            clr_oprn_sym
+                .set_italic(line.jump().is_external())
+                .set_bold(line.jump().is_internal());
+            &clr_oprn_sym
         } else {
-            out.set_color(&clr_oprn)?;
+            &clr_oprn
+        };
+        out.set_color(oprn_color)?;
+
+        let mut operands = WordWrapped::new(line.operands(), max_oprn);
+        let mut has_more_operands = false;
+        let mut operand_chars_printed = 0;
+        while let Some(operand) = operands.next() {
+            if let WrappedStr::Str(token) = operand {
+                operand_chars_printed += token.len();
+                write!(out, "{}", token)?;
+            } else {
+                has_more_operands = true;
+                break;
+            }
         }
-        write!(out, "{:<1$}", line.operands(), max_oprn)?;
 
-        out.set_color(&clr_norm)?;
-
+        // Write the comment after the first line of the operands:
         if !line.comments().is_empty() {
-            write!(out, "{}", space_lg)?;
+            out.set_color(&clr_norm)?;
+            write!(
+                out,
+                "{}",
+                Spacing(space_lg.0 + (max_oprn - operand_chars_printed))
+            )?;
             out.set_color(&clr_comm)?;
             write!(out, "; {:<1$}", line.comments(), max_comm)?;
         }
 
-        out.set_color(&clr_norm)?;
+        // Write the remaining lines of the operands if there are any:
+        if has_more_operands {
+            out.set_color(&clr_norm)?;
+            writeln!(out)?;
+            write!(out, "{}", oprn_indent)?;
+            let mut in_oprn_color = false;
+            for w in operands {
+                match w {
+                    WrappedStr::Str(s) => {
+                        if !in_oprn_color {
+                            out.set_color(oprn_color)?;
+                            in_oprn_color = true;
+                        }
+                        write!(out, "{}", s)?;
+                    }
+
+                    WrappedStr::Break => {
+                        if in_oprn_color {
+                            out.set_color(&clr_norm)?;
+                            in_oprn_color = false;
+                        }
+                        writeln!(out)?;
+                        write!(out, "{}", oprn_indent)?;
+                    }
+                }
+            }
+        } else {
+            out.set_color(&clr_norm)?;
+        }
         writeln!(out)?;
     }
 
@@ -104,4 +157,48 @@ impl std::fmt::Display for Spacing {
             }
         }
     }
+}
+
+pub struct WordWrapped<'s> {
+    max_len: usize,
+    cur_len: usize,
+    tokens: Tokenizer<'s>,
+    pending: Option<&'s str>,
+}
+
+impl<'s> WordWrapped<'s> {
+    pub fn new(string: &'s str, max_len: usize) -> WordWrapped<'s> {
+        WordWrapped {
+            max_len,
+            cur_len: 0,
+            tokens: Tokenizer::no_whitespace_normalize(string),
+            pending: None,
+        }
+    }
+}
+
+impl<'s> Iterator for WordWrapped<'s> {
+    type Item = WrappedStr<'s>;
+
+    fn next(&mut self) -> Option<Self::Item> {
+        if let Some(pending) = self.pending.take() {
+            self.cur_len += pending.len();
+            return Some(WrappedStr::Str(pending));
+        }
+
+        let next_token = self.tokens.next()?;
+        if self.cur_len + next_token.len() > self.max_len {
+            self.cur_len = 0;
+            self.pending = Some(next_token);
+            Some(WrappedStr::Break)
+        } else {
+            self.cur_len += next_token.len();
+            Some(WrappedStr::Str(next_token))
+        }
+    }
+}
+
+pub enum WrappedStr<'s> {
+    Str(&'s str),
+    Break,
 }

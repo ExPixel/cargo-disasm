@@ -2,13 +2,26 @@ use std::str::Chars;
 
 pub struct Tokenizer<'a> {
     source: Chars<'a>,
+    normalize_whitespace: bool,
 }
 
 impl<'a> Tokenizer<'a> {
     pub fn new(source: &'a str) -> Tokenizer<'a> {
         Tokenizer {
             source: source.chars(),
+            normalize_whitespace: true,
         }
+    }
+
+    pub fn no_whitespace_normalize(source: &'a str) -> Tokenizer<'a> {
+        Tokenizer {
+            source: source.chars(),
+            normalize_whitespace: false,
+        }
+    }
+
+    fn set_normalize_whitespace(&mut self, n: bool) {
+        self.normalize_whitespace = n;
     }
 
     fn next_char(&mut self) -> Option<char> {
@@ -48,7 +61,7 @@ impl<'a> Iterator for Tokenizer<'a> {
             }
 
             // normalize whitespace
-            ch if ch.is_whitespace() => {
+            ch if ch.is_whitespace() && self.normalize_whitespace => {
                 loop {
                     if !self.next_char_if(|ch| ch.is_whitespace()) {
                         break;
