@@ -45,6 +45,8 @@ impl DwarfInfo {
         F: FnMut(u64) -> Option<usize>,
     {
         let mut unit_headers = self.dwarf.units();
+        let mut name_chain = NameChain::new();
+
         while let Some(unit_header) = unit_headers
             .next()
             .context("failed to read DWARF compilation unit")?
@@ -55,7 +57,8 @@ impl DwarfInfo {
                 continue;
             };
 
-            self.load_symbols_from_unit(&unit, symbols, &mut addr_to_offset)
+            name_chain.clear();
+            self.load_symbols_from_unit(&unit, symbols, &mut addr_to_offset, &mut name_chain)
                 .context("failed to load symbols from compilation unit")?;
         }
         Ok(())
@@ -66,6 +69,7 @@ impl DwarfInfo {
         unit: &gimli::Unit<BinaryDataReader>,
         symbols: &mut Vec<Symbol>,
         mut addr_to_offset: &mut F,
+        name_chain: &mut NameChain,
     ) -> Result<(), gimli::Error>
     where
         F: FnMut(u64) -> Option<usize>,
@@ -73,6 +77,8 @@ impl DwarfInfo {
         let mut entries = unit.entries_raw(None)?;
 
         while !entries.is_empty() {
+            name_chain.set_depth(entries.next_depth());
+
             let abbrev = if let Some(abbrev) = entries.read_abbreviation()? {
                 abbrev
             } else {
@@ -88,13 +94,22 @@ impl DwarfInfo {
                     unit,
                     &self.dwarf,
                     addr_to_offset,
+                    name_chain,
                 )? {
                     symbols.push(symbol);
                 }
             } else {
+                let track_name =
+                    abbrev.tag() == gimli::DW_TAG_module || abbrev.tag() == gimli::DW_TAG_namespace;
+
                 // skip the attributes for this DIE, we don't care about it.
                 for spec in abbrev.attributes() {
-                    entries.read_attribute(*spec)?;
+                    let attr = entries.read_attribute(*spec)?;
+
+                    // If the name should be tracked, push it onto the name chain.
+                    if track_name && attr.name() == gimli::DW_AT_name {
+                        name_chain.push(self.dwarf.attr_string(unit, attr.value())?);
+                    }
                 }
             }
         }
@@ -108,6 +123,7 @@ impl DwarfInfo {
         unit: &gimli::Unit<BinaryDataReader>,
         dwarf: &Dwarf<BinaryDataReader>,
         addr_to_offset: &mut F,
+        name_chain: &mut NameChain,
     ) -> Result<Option<Symbol>, gimli::Error>
     where
         F: FnMut(u64) -> Option<usize>,
@@ -115,6 +131,7 @@ impl DwarfInfo {
         let mut start = None;
         let mut end: Option<u64> = None;
         let mut name = None;
+        let mut linkage_name = false;
         let mut end_is_offset = false;
 
         for spec in attributes {
@@ -133,17 +150,19 @@ impl DwarfInfo {
                 // FIXME Here we use the mangled name because I couldn't figure out
                 //       how to retrieve a fully qualified name (module::submodule::Type::function)
                 //       using DW_AT_name. Maybe this is the right way to do it?
-                gimli::DW_AT_linkage_name => name = Some(dwarf.attr_string(unit, attr.value())?),
+                gimli::DW_AT_linkage_name if name.is_none() => {
+                    linkage_name = true;
+                    name = Some(dwarf.attr_string(unit, attr.value())?)
+                }
+                gimli::DW_AT_name => {
+                    linkage_name = false;
+                    name = Some(dwarf.attr_string(unit, attr.value())?)
+                }
                 _ => continue,
             }
         }
 
-        if let (Some(start), Some(mut end), Some(name)) = (
-            start,
-            end,
-            name.as_ref()
-                .and_then(|n| std::str::from_utf8(n.bytes()).ok()),
-        ) {
+        if let (Some(start), Some(mut end), Some(name)) = (start, end, name) {
             if end_is_offset {
                 end += start;
             }
@@ -151,16 +170,35 @@ impl DwarfInfo {
 
             if let Some(off) = addr_to_offset(start) {
                 let len = (end - start) as usize;
-                Ok(Some(Symbol::new(
-                    name.to_string(),
-                    start,
-                    off,
-                    len,
-                    SymbolType::Function,
-                    SymbolSource::Dwarf,
-                    // FIXME use the unit to figure this out. The information is in there.
-                    SymbolLang::Unknown,
-                )))
+
+                if linkage_name {
+                    if let Ok(name) = std::str::from_utf8(name.bytes()) {
+                        Ok(Some(Symbol::new(
+                            name.to_string(),
+                            start,
+                            off,
+                            len,
+                            SymbolType::Function,
+                            SymbolSource::Dwarf,
+                            // FIXME use the unit to figure this out. The information is in there.
+                            SymbolLang::Unknown,
+                        )))
+                    } else {
+                        Ok(None)
+                    }
+                } else {
+                    name_chain.push(name);
+                    Ok(Some(Symbol::new(
+                        name_chain.combine("::"),
+                        start,
+                        off,
+                        len,
+                        SymbolType::Function,
+                        SymbolSource::Dwarf,
+                        // FIXME use the unit to figure this out. The information is in there.
+                        SymbolLang::Unknown,
+                    )))
+                }
             } else {
                 Ok(None)
             }
@@ -431,15 +469,7 @@ impl Lines {
     fn lines_for_addr(&self, addr: u64) -> Option<(&Path, u32)> {
         let sequence = self
             .sequences
-            .binary_search_by(|probe| {
-                if probe.range.start > addr {
-                    std::cmp::Ordering::Greater
-                } else if probe.range.end <= addr {
-                    std::cmp::Ordering::Less
-                } else {
-                    std::cmp::Ordering::Equal
-                }
-            })
+            .binary_search_by(|probe| util::cmp_range_to_idx(&probe.range, addr))
             .ok()
             .and_then(|seq_idx| self.sequences.get(seq_idx))?;
 
@@ -463,4 +493,77 @@ struct Line {
     addr: u64,
     file: usize,
     line: u32,
+}
+
+struct NameChain {
+    names: Vec<(BinaryDataReader, isize)>,
+    length: usize,
+    depth: isize,
+}
+
+impl NameChain {
+    fn new() -> NameChain {
+        NameChain {
+            names: Vec::with_capacity(32),
+            length: 0,
+            depth: 0,
+        }
+    }
+
+    fn set_depth(&mut self, d: isize) {
+        if d <= self.depth {
+            self.depth = d;
+            let mut remove = 0;
+            for &(_, d) in self.names.iter().rev() {
+                if d < self.depth {
+                    break;
+                } else {
+                    remove += 1;
+                }
+            }
+
+            for (name, _) in self.names.drain((self.names.len() - remove)..) {
+                self.length -= name.len();
+            }
+        } else {
+            self.depth = d;
+        }
+    }
+
+    fn push(&mut self, name: BinaryDataReader) {
+        self.length += name.len();
+        self.names.push((name, self.depth));
+    }
+
+    fn combine(&self, separator: &str) -> String {
+        let mut ret = String::new();
+        if self.names.is_empty() {
+            return ret;
+        }
+        let mut reserve = self.length + (separator.len() * (self.names.len() - 1));
+        ret.reserve(reserve);
+
+        let mut first = true;
+        for (name, _) in self.names.iter() {
+            if first {
+                first = false;
+            } else {
+                ret.push_str(separator);
+            }
+            ret.push_str(if let Ok(n) = std::str::from_utf8(name.bytes()) {
+                n
+            } else {
+                "?"
+            });
+        }
+        assert_eq!(reserve, ret.len());
+
+        ret
+    }
+
+    fn clear(&mut self) {
+        self.names.clear();
+        self.length = 0;
+        self.depth = 0;
+    }
 }

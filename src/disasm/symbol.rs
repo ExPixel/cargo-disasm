@@ -26,6 +26,26 @@ pub struct Symbol {
 }
 
 impl Symbol {
+    pub fn new_unmangled(
+        name: String,
+        addr: u64,
+        bpos: usize,
+        blen: usize,
+        type_: SymbolType,
+        source: SymbolSource,
+        lang: SymbolLang,
+    ) -> Self {
+        Symbol {
+            name,
+            addr,
+            bpos,
+            blen,
+            type_,
+            source,
+            lang,
+        }
+    }
+
     pub fn new<'a, N>(
         name: N,
         addr: u64,

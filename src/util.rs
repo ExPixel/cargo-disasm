@@ -17,3 +17,21 @@ impl std::fmt::Display for DurationDisplay {
         }
     }
 }
+
+pub fn cmp_range_to_idx<Idx>(
+    range: &std::ops::Range<Idx>,
+    idx: impl std::borrow::Borrow<Idx>,
+) -> std::cmp::Ordering
+where
+    Idx: std::cmp::PartialOrd<Idx>,
+{
+    let idx = idx.borrow();
+
+    if range.start > *idx {
+        std::cmp::Ordering::Greater
+    } else if range.end <= *idx {
+        std::cmp::Ordering::Less
+    } else {
+        std::cmp::Ordering::Equal
+    }
+}
