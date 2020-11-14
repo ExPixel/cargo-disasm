@@ -109,7 +109,12 @@ pub fn run() -> anyhow::Result<()> {
     sources.sort_unstable();
     sources.dedup();
 
-    let mut search_options = SearchOptions { sources: &sources };
+    let mut search_options = SearchOptions {
+        sources: &sources,
+        dwarf_path: None,
+        dsym_path: None,
+        pdb_path: None,
+    };
     let bin = Binary::new(data, search_options)?;
 
     // FIXME temporary test code

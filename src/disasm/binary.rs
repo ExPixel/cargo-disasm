@@ -4,7 +4,14 @@ use super::strmatch::{distance, Tokenizer};
 use super::symbol::{Symbol, SymbolLang, SymbolSource, SymbolType};
 use crate::util;
 use anyhow::Context as _;
-use goblin::{archive::Archive, elf::Elf, mach::MachO, pe::PE, Object};
+use goblin::mach::segment::Section as MachSection;
+use goblin::{
+    archive::Archive,
+    elf::Elf,
+    mach::{Mach, MachO},
+    pe::PE,
+    Object,
+};
 use memmap::{Mmap, MmapOptions};
 use std::convert::TryFrom as _;
 use std::fmt;
@@ -66,15 +73,7 @@ impl Binary {
     pub fn symbolicate(&self, addr: u64) -> Option<(&Symbol, u64)> {
         let mut idx = self
             .symbols
-            .binary_search_by(|probe| {
-                if probe.address() > addr {
-                    std::cmp::Ordering::Greater
-                } else if probe.end_address() <= addr {
-                    std::cmp::Ordering::Less
-                } else {
-                    std::cmp::Ordering::Equal
-                }
-            })
+            .binary_search_by(|probe| util::cmp_range_to_idx(&probe.address_range(), addr))
             .ok()?;
 
         // We might have duplicates of a symbol (e.g. from DWARF and ELF), so we want
@@ -290,15 +289,7 @@ impl Binary {
 
             let addr_to_offset = |addr| {
                 sections
-                    .binary_search_by(|(probe, _)| {
-                        if probe.start > addr {
-                            std::cmp::Ordering::Greater
-                        } else if probe.end <= addr {
-                            std::cmp::Ordering::Less
-                        } else {
-                            std::cmp::Ordering::Equal
-                        }
-                    })
+                    .binary_search_by(|(probe, _)| util::cmp_range_to_idx(probe, addr))
                     .ok()
                     .map(|idx| {
                         let &(ref range, off) = &sections[idx];
@@ -402,6 +393,16 @@ impl Binary {
             }
         }
 
+        let mut sections: Vec<MachSection> = Vec::new();
+        for segment in mach.segments.iter() {
+            for s in segment.into_iter() {
+                let (section, _) = s.context("error occured while getting Mach-O section")?;
+                sections.push(section);
+            }
+        }
+
+        self.parse_mach_dwarf(&sections, load_dwarf_symbols)?;
+
         // If we're using `auto` for the symbol source and no symbols are found.
         load_mach_symbols |= options.sources.is_empty() && self.symbols.is_empty();
 
@@ -409,7 +410,7 @@ impl Binary {
             log::info!("retrieving symbols from Mach-O object");
             let symbols_count_before = self.symbols.len();
             let load_symbols_timer = std::time::Instant::now();
-            self.gather_mach_symbols(mach)?;
+            self.gather_mach_symbols(mach, &sections)?;
             log::trace!(
                 "found {} symbols in Mach-O object in {}",
                 self.symbols.len() - symbols_count_before,
@@ -426,16 +427,12 @@ impl Binary {
         Ok(())
     }
 
-    fn gather_mach_symbols(&mut self, mach: &MachO) -> anyhow::Result<()> {
+    fn gather_mach_symbols(
+        &mut self,
+        mach: &MachO,
+        sections: &[MachSection],
+    ) -> anyhow::Result<()> {
         use goblin::mach::symbols;
-
-        let mut section_offsets: Vec<(u64, usize)> = Vec::new();
-        for segment in mach.segments.iter() {
-            for s in segment.into_iter() {
-                let (section, _) = s.context("error occured while getting Mach-O section")?;
-                section_offsets.push((section.addr as u64, section.offset as usize));
-            }
-        }
 
         // The starting index for Mach symbols in the `symbols` vector.
         let mach_symbols_idx = self.symbols.len();
@@ -457,9 +454,8 @@ impl Binary {
                 continue;
             }
 
-            let sym_offset = if let Some((sec_addr, sec_off)) = section_offsets.get(sym.n_sect - 1)
-            {
-                (sym_addr - sec_addr) as usize + sec_off
+            let sym_offset = if let Some(section) = sections.get(sym.n_sect - 1) {
+                (sym_addr - section.addr) as usize + section.offset as usize
             } else {
                 continue;
             };
@@ -492,6 +488,146 @@ impl Binary {
         Ok(())
     }
 
+    fn parse_mach_dwarf(
+        &mut self,
+        sections: &[MachSection],
+        load_dwarf_symbols: bool,
+    ) -> anyhow::Result<()> {
+        match self.load_dsym_dwarf().context("failed to load mach DWARF") {
+            Ok(maybe_dwarf) => self.dwarf = maybe_dwarf,
+            Err(err) => log::warn!("{:?}", err),
+        }
+
+        // If we don't load a DWARF from an external source, use the current
+        // Mach binary.
+        if self.dwarf.is_none() {
+            let endian = gimli::RunTimeEndian::from(self.endian);
+            let loader = |section: gimli::SectionId| {
+                Self::get_mach_section_data_by_name(&self.data, &sections, section.name())
+                    .map(|d| gimli::EndianReader::new(d, endian))
+            };
+            let sup_loader = |section: gimli::SectionId| {
+                Ok(gimli::EndianReader::new(self.data.slice(0..0), endian))
+            };
+            let dwarf = Box::new(DwarfInfo::new(loader, sup_loader)?);
+        }
+
+        if let (true, &Some(ref dwarf)) = (load_dwarf_symbols, &self.dwarf) {
+            log::info!("retrieving symbols from DWARF debug information");
+
+            let addr_to_offset = |addr| {
+                sections
+                    .binary_search_by(|probe| {
+                        util::cmp_range_to_idx(
+                            &(probe.addr..(probe.addr + probe.size as u64)),
+                            addr,
+                        )
+                    })
+                    .ok()
+                    .map(|idx| (addr - sections[idx].addr) as usize + sections[idx].offset as usize)
+            };
+
+            let symbols_count_before = self.symbols.len();
+            let load_symbols_timer = std::time::Instant::now();
+            dwarf.load_symbols(&mut self.symbols, addr_to_offset)?;
+            log::trace!(
+                "found {} symbols in DWARF debug information in {}",
+                self.symbols.len() - symbols_count_before,
+                util::DurationDisplay(load_symbols_timer.elapsed())
+            );
+        }
+        Ok(())
+    }
+
+    /// Find and load the DWARF object file from the dSYM directory.
+    fn load_dsym_dwarf(&self) -> anyhow::Result<Option<Box<DwarfInfo>>> {
+        let dsym_directory = if let Some(d) = self.find_dsym_directory() {
+            d
+        } else {
+            return Ok(None);
+        };
+        log::trace!("found dSYM directory: {}", dsym_directory.display());
+        let mut object_path = {
+            let mut o_path = dsym_directory;
+            o_path.push("Contents");
+            o_path.push("Resources");
+            o_path.push("DWARF");
+            if let Some(fname) = self.data.path().file_name() {
+                o_path.push(fname);
+            } else {
+                return Ok(None);
+            }
+            o_path
+        };
+
+        if !object_path.is_file() {
+            log::trace!(
+                "did not find dSYM DWARF object file at expected path: {}",
+                object_path.display()
+            );
+            return Ok(None);
+        } else {
+            log::trace!(
+                "located dSYM DWARF object file at {}",
+                object_path.display()
+            );
+        }
+
+        let data =
+            BinaryData::from_path(&object_path).context("failed to load Mach-O DWARF binary")?;
+        let mach = Mach::parse(&data)
+            .with_context(|| format!("failed to parse Mach-O binary {}", object_path.display()))?;
+        let mach = match mach {
+            goblin::mach::Mach::Fat(multi) => multi
+                .get(0)
+                .context("failed to get first object from fat Mach binary")?,
+            goblin::mach::Mach::Binary(obj) => obj,
+        };
+
+        let mut sections: Vec<MachSection> = Vec::new();
+        for segment in mach.segments.iter() {
+            for s in segment.into_iter() {
+                let (section, _) = s.context("error occured while getting Mach-O section")?;
+                sections.push(section);
+            }
+        }
+        sections.sort_unstable_by_key(|section| section.addr);
+
+        let endian = if mach.little_endian {
+            gimli::RunTimeEndian::Little
+        } else {
+            gimli::RunTimeEndian::Big
+        };
+        let loader = |section: gimli::SectionId| {
+            Self::get_mach_section_data_by_name(&data, &sections, section.name())
+                .map(|d| gimli::EndianReader::new(d, endian))
+        };
+        let sup_loader =
+            |section: gimli::SectionId| Ok(gimli::EndianReader::new(self.data.slice(0..0), endian));
+        let dwarf = Box::new(DwarfInfo::new(loader, sup_loader)?);
+
+        Ok(Some(dwarf))
+    }
+
+    /// Find the dSYM directory relative to the currently
+    /// loaded executable.
+    fn find_dsym_directory(&self) -> Option<PathBuf> {
+        let executable_dir = self.data.path().parent()?;
+        let entries = executable_dir.read_dir().ok().or_else(|| {
+            log::warn!("failed to open `{}` as directory", executable_dir.display());
+            None
+        })?;
+
+        entries
+            .filter_map(|entry| entry.map(|e| e.path()).ok())
+            .filter(|path| {
+                path.file_name()
+                    .filter(|n| n.to_string_lossy().ends_with(".dSYM"))
+                    .is_some()
+            })
+            .find(|path| path.is_dir())
+    }
+
     fn parse_pe_object(&mut self, pe: &PE) -> anyhow::Result<()> {
         Err(anyhow::anyhow!("PE objects are not currently supported"))
     }
@@ -500,6 +636,32 @@ impl Binary {
         Err(anyhow::anyhow!(
             "archive objects are not currently supported"
         ))
+    }
+
+    fn get_mach_section_data_by_name(
+        data: &BinaryData,
+        sections: &[MachSection],
+        name: &str,
+    ) -> anyhow::Result<BinaryData> {
+        let dot = name.starts_with('.');
+
+        if let Some(section) = sections.iter().find(|section| {
+            if let Ok(section_name) = section.name() {
+                if section_name.starts_with("__") && dot {
+                    section_name[2..] == name[1..]
+                } else {
+                    section_name == name
+                }
+            } else {
+                false
+            }
+        }) {
+            let start = section.offset as usize;
+            let end = start + section.size as usize;
+            Ok(data.slice(start..end))
+        } else {
+            Ok(data.slice(0..0))
+        }
     }
 
     fn get_elf_section_data_by_name(&self, elf: &Elf, name: &str) -> anyhow::Result<BinaryData> {
@@ -794,15 +956,15 @@ const MACH_TYPE_FUNC: u8 = 0x24;
 
 pub struct SearchOptions<'a> {
     pub sources: &'a [SymbolSource],
-    // FIXME implement these
-    // /// Path to an object file containing DWARF debug information.
-    // /// Used for ELF and Mach-O object files.
-    // pub dwarf_path: Option<&'a Path>,
 
-    // /// The path to the dSYM directory.
-    // /// Used for Mach-O object files.
-    // pub dsym_path: Option<&'a Path>,
+    /// Path to an object file containing DWARF debug information.
+    /// Used for ELF and Mach-O object files.
+    pub dwarf_path: Option<&'a Path>,
 
-    // /// Path to a PDB file used for PE object files.
-    // pub pdb_path: Option<&'a Path>,
+    /// The path to the dSYM directory.
+    /// Used for Mach-O object files.
+    pub dsym_path: Option<&'a Path>,
+
+    /// Path to a PDB file used for PE object files.
+    pub pdb_path: Option<&'a Path>,
 }
