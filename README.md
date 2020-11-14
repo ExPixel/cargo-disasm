@@ -51,7 +51,7 @@ cargo disasm --release --symsrc=all foo::bar::baz
 
 **MacOS**  
 - [x] Mach file disassembly and symbol discovery
-- [ ] use dSYM (DWARF) for symbol discovery and line information
+- [x] use dSYM (DWARF) for symbol discovery and line information
 
 **Linux**  
 - [x] ELF file disassembly and symbol discovery
