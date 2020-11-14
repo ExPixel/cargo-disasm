@@ -14,17 +14,26 @@ pub fn disassemble() -> Result<(), Box<dyn Error>> {
     let build_test_project = cargo_build(&test_project_dir)?;
     assert!(build_test_project.success());
 
-    let disasm_test_project = cargo_disasm(&test_project_dir)?;
-
+    let disasm_test_project = cargo_disasm(&test_project_dir, "pow::my_pow")?;
     // FIXME ignore windows for now.
     if !cfg!(target_os = "windows") {
         assert!(disasm_test_project.success());
     }
 
+    let disasm_current_project = cargo_disasm(&manifest_dir, "cargo_disasm::main")?;
+    // FIXME ignore windows for now.
+    if !cfg!(target_os = "windows") {
+        assert!(disasm_current_project.success());
+    }
+
     Ok(())
 }
 
-fn cargo_disasm<P: AsRef<Path>>(disasm_dir: P) -> Result<ExitStatus, Box<dyn Error>> {
+fn cargo_disasm<P, S>(disasm_dir: P, symbol: S) -> Result<ExitStatus, Box<dyn Error>>
+where
+    P: AsRef<Path>,
+    S: AsRef<OsStr>,
+{
     let manifest_dir = Path::new(env!("CARGO_MANIFEST_DIR"));
     let mut disasm_exec_name = String::from("cargo-disasm");
     disasm_exec_name.push_str(std::env::consts::EXE_SUFFIX);
@@ -34,7 +43,7 @@ fn cargo_disasm<P: AsRef<Path>>(disasm_dir: P) -> Result<ExitStatus, Box<dyn Err
         .join(&disasm_exec_name);
     let mut disasm_command = Command::new(disasm_exec);
     disasm_command.current_dir(disasm_dir);
-    disasm_command.args(&[OsStr::new("-vvv"), OsStr::new("pow::my_pow")]);
+    disasm_command.args(&[OsStr::new("-vvv"), symbol.as_ref()]);
     disasm_command.status().map_err(|err| err.into())
 }
 
