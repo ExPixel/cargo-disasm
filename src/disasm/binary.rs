@@ -167,7 +167,7 @@ impl Binary {
         let data = self.data.clone();
         match Object::parse(&data).context("failed to parse object")? {
             Object::Elf(elf) => self.parse_elf_object(&elf, options),
-            Object::PE(pe) => self.parse_pe_object(&pe),
+            Object::PE(pe) => self.parse_pe_object(&pe, options),
             Object::Mach(mach) => match mach {
                 goblin::mach::Mach::Fat(multi) => self.parse_mach_object(
                     &multi
@@ -624,8 +624,215 @@ impl Binary {
             .find(|path| path.is_dir())
     }
 
-    fn parse_pe_object(&mut self, _pe: &PE) -> anyhow::Result<()> {
-        Err(anyhow::anyhow!("PE objects are not currently supported"))
+    fn parse_pe_object(&mut self, pe: &PE, options: SearchOptions) -> anyhow::Result<()> {
+        log::debug!("object type   = PE/COFF");
+
+        self.bits = if pe.is_64 { Bits::Bits64 } else { Bits::Bits32 };
+        self.endian = Endian::Little;
+        self.arch = Arch::from_coff_machine(pe.header.coff_header.machine);
+
+        log::debug!("object bits   = {}", self.bits);
+        log::debug!("object endian = {}", self.endian);
+        log::debug!("object arch   = {}", self.arch);
+
+        let load_all_symbols_timer = std::time::Instant::now();
+        let mut load_pe_symbols = false;
+        let mut load_pdb_symbols = options.sources.is_empty();
+        let mut load_dwarf_symbols = options.sources.is_empty();
+        options.sources.iter().for_each(|source| match source {
+            SymbolSource::Pe => load_pe_symbols = true,
+            SymbolSource::Pdb => load_pdb_symbols = true,
+            SymbolSource::Dwarf => load_dwarf_symbols = true,
+            _ => {}
+        });
+
+        self.parse_pe_pdb(pe, load_pdb_symbols)
+            .context("error while gathering PDB symbols")?;
+        self.parse_pe_dwarf(pe, load_dwarf_symbols)
+            .context("error while gathering DWARF symbols")?;
+
+        // If we're using `auto` for the symbol source and no symbols are found.
+        load_pe_symbols |= options.sources.is_empty() && self.symbols.is_empty();
+
+        if load_pe_symbols {
+            log::info!("retrieving symbols from PE/COFF object");
+            let symbols_count_before = self.symbols.len();
+            let load_symbols_timer = std::time::Instant::now();
+            self.gather_pe_symbols(pe)
+                .context("error while gathering PE symbols")?;
+            log::trace!(
+                "found {} symbols in PE/COFF object in {}",
+                self.symbols.len() - symbols_count_before,
+                util::DurationDisplay(load_symbols_timer.elapsed())
+            );
+        }
+
+        log::debug!(
+            "found {} total symbols in {}",
+            self.symbols.len(),
+            util::DurationDisplay(load_all_symbols_timer.elapsed())
+        );
+
+        Ok(())
+    }
+
+    fn gather_pe_symbols(&mut self, pe: &PE) -> anyhow::Result<()> {
+        use goblin::pe;
+
+        #[rustfmt::skip]
+        let symtab = pe.header.coff_header.symbols(&self.data)
+            .context("error while loading COFF header symbol table")?;
+
+        // There are no symbols in here >:(
+        if symtab.get(0).is_none() {
+            log::debug!("no symbols in PE/COFF object");
+            return Ok(());
+        }
+
+        #[rustfmt::skip]
+        let strtab = pe.header.coff_header.strings(&self.data)
+            .context("error while loading COFF header string table")?;
+        let pe_symbols_index = self.symbols.len();
+
+        // A list of ALL symbol addresses (even non-function symbols).
+        // This will be used for figuring out where symbols end.
+        let mut symbol_addresses = Vec::<u64>::with_capacity(32);
+
+        for (_sym_index, inline_name, symbol) in symtab.iter() {
+            let (sym_addr, sym_offset) = if symbol.section_number >= 1 {
+                let section = &pe.sections[symbol.section_number as usize - 1];
+
+                if symbol.storage_class == pe::symbol::IMAGE_SYM_CLASS_STATIC
+                    || symbol.storage_class == pe::symbol::IMAGE_SYM_CLASS_EXTERNAL
+                    || symbol.storage_class == pe::symbol::IMAGE_SYM_CLASS_LABEL
+                {
+                    (
+                        pe.image_base as u64 + (section.virtual_address + symbol.value) as u64,
+                        (section.pointer_to_raw_data + symbol.value) as usize,
+                    )
+                } else {
+                    continue;
+                }
+            } else {
+                continue;
+            };
+
+            symbol_addresses.push(sym_addr);
+
+            if !symbol.is_function_definition() {
+                continue;
+            }
+
+            // FIXME for now we skip symbols that are just sections but I think sections can also
+            // actually contain functions in which case the entire section should be used. I'm not
+            // sure if this is the case though.
+            if symbol.value == 0 {
+                continue;
+            }
+
+            let sym_name = if let Some(name) = inline_name {
+                name
+            } else if let Some(Ok(name)) = symbol
+                .name_offset()
+                .and_then(|off| strtab.get(off as usize))
+            {
+                name
+            } else {
+                continue;
+            };
+
+            self.symbols.push(Symbol::new(
+                sym_name,
+                sym_addr,
+                sym_offset as usize,
+                0, // this is fixed later
+                SymbolType::Function,
+                SymbolSource::Pe,
+                SymbolLang::Unknown,
+            ));
+        }
+
+        symbol_addresses.sort_unstable();
+        symbol_addresses.dedup();
+
+        // Figure out where symbols end by using the starting address of the next symbol.
+        for symbol in &mut self.symbols[pe_symbols_index..] {
+            if let Ok(idx) = symbol_addresses.binary_search(&symbol.address()) {
+                if let Some(next_addr) = symbol_addresses.get(idx + 1) {
+                    symbol.set_size((next_addr - symbol.address()) as usize);
+                    continue;
+                }
+            };
+            symbol.set_address(0);
+        }
+
+        Ok(())
+    }
+
+    fn parse_pe_pdb(&mut self, pe: &PE, _load_symbols: bool) -> anyhow::Result<()> {
+        self.load_pe_pdb(pe)?;
+        Ok(())
+    }
+
+    fn parse_pe_dwarf(&mut self, _pe: &PE, _load_symbols: bool) -> anyhow::Result<()> {
+        Ok(())
+    }
+
+    fn load_pe_pdb(&mut self, pe: &PE) -> anyhow::Result<Option<Box<PDBInfo>>> {
+        let path = if let Some(path) = self.get_pe_pdb_path(pe)? {
+            path
+        } else {
+            return Ok(None);
+        };
+        log::debug!("found PDB at `{}`", path.display());
+        Ok(None)
+    }
+
+    fn get_pe_pdb_path(&self, pe: &PE) -> anyhow::Result<Option<PathBuf>> {
+        if let Some(ref debug_path) = pe
+            .debug_data
+            .as_ref()
+            .and_then(|data| data.codeview_pdb70_debug_info.as_ref())
+            .and_then(|cv| std::ffi::CStr::from_bytes_with_nul(cv.filename).ok())
+            .and_then(|cs| cs.to_str().ok())
+        {
+            let path = Path::new(debug_path);
+            if path.is_absolute() && path.is_file() {
+                Ok(Some(path.into()))
+            } else {
+                Ok(debug_path
+                    .rsplit(|c| c == '/' || c == '\\')
+                    .next()
+                    .map(|s| Path::new(s))
+                    .or_else(|| Some(Path::new(self.data.path().file_stem()?)))
+                    .and_then(|p| Some(self.data.path().parent()?.join(p)))
+                    .filter(|p| {
+                        if p.is_file() {
+                            true
+                        } else {
+                            log::debug!("did not find PDB at expected path `{}`", p.display());
+                            false
+                        }
+                    }))
+            }
+        } else {
+            log::debug!("here");
+            // This closure if here just to simplify handling the 2 None cases.
+            let get_path = || -> Option<PathBuf> {
+                let mut buf = PathBuf::from(self.data.path().parent()?);
+                let mut name = self.data.path().file_stem()?.to_owned();
+                name.push(".pdb");
+                buf.push(name);
+                if buf.is_file() {
+                    Some(buf)
+                } else {
+                    log::debug!("did not find PDB at expected path `{}`", buf.display());
+                    None
+                }
+            };
+
+            Ok(get_path())
+        }
     }
 
     fn parse_archive_object(&mut self, _archive: &Archive) -> anyhow::Result<()> {
@@ -842,6 +1049,18 @@ impl Arch {
             cputype::CPU_TYPE_ARM64_32 => Arch::AArch64,
             cputype::CPU_TYPE_X86 => Arch::X86,
             cputype::CPU_TYPE_X86_64 => Arch::X86_64,
+            _ => Arch::Unknown,
+        }
+    }
+
+    fn from_coff_machine(machine: u16) -> Arch {
+        use goblin::pe::header;
+
+        match machine {
+            header::COFF_MACHINE_X86 => Arch::X86,
+            header::COFF_MACHINE_X86_64 => Arch::X86_64,
+            header::COFF_MACHINE_ARM => Arch::Arm,
+            header::COFF_MACHINE_ARM64 => Arch::AArch64,
             _ => Arch::Unknown,
         }
     }
