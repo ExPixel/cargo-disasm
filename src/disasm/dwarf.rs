@@ -105,6 +105,10 @@ impl DwarfInfo {
                     gimli::DW_TAG_structure_type,
                     gimli::DW_TAG_class_type,
                     gimli::DW_TAG_union_type,
+                    gimli::DW_TAG_interface_type,
+                    // FIXME I'm not sure about this one:
+                    gimli::DW_TAG_inheritance,
+                    gimli::DW_TAG_enumeration_type,
                 ];
                 let track_name = TAGS.contains(&abbrev.tag());
 
