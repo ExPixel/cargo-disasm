@@ -99,8 +99,14 @@ impl DwarfInfo {
                     symbols.push(symbol);
                 }
             } else {
-                let track_name =
-                    abbrev.tag() == gimli::DW_TAG_module || abbrev.tag() == gimli::DW_TAG_namespace;
+                const TAGS: &[gimli::DwTag] = &[
+                    gimli::DW_TAG_module,
+                    gimli::DW_TAG_namespace,
+                    gimli::DW_TAG_structure_type,
+                    gimli::DW_TAG_class_type,
+                    gimli::DW_TAG_union_type,
+                ];
+                let track_name = TAGS.contains(&abbrev.tag());
 
                 // skip the attributes for this DIE, we don't care about it.
                 for spec in abbrev.attributes() {
