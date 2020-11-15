@@ -206,13 +206,11 @@ impl Binary {
 
         let mut load_elf_symbols = false;
         let mut load_dwarf_symbols = options.sources.is_empty(); // `auto` makes this true
-        for &source in options.sources.iter() {
-            match source {
-                SymbolSource::Elf => load_elf_symbols = true,
-                SymbolSource::Dwarf => load_dwarf_symbols = true,
-                _ => {}
-            }
-        }
+        options.sources.iter().for_each(|source| match source {
+            SymbolSource::Elf => load_elf_symbols = true,
+            SymbolSource::Dwarf => load_dwarf_symbols = true,
+            _ => {}
+        });
 
         let has_dwarf_debug_info = elf
             .section_headers
@@ -384,14 +382,11 @@ impl Binary {
         let load_all_symbols_timer = std::time::Instant::now();
         let mut load_mach_symbols = false;
         let mut load_dwarf_symbols = options.sources.is_empty();
-
-        for &source in options.sources.iter() {
-            match source {
-                SymbolSource::Mach => load_mach_symbols = true,
-                SymbolSource::Dwarf => load_dwarf_symbols = true,
-                _ => {}
-            }
-        }
+        options.sources.iter().for_each(|source| match source {
+            SymbolSource::Mach => load_mach_symbols = true,
+            SymbolSource::Dwarf => load_dwarf_symbols = true,
+            _ => {}
+        });
 
         let mut sections: Vec<MachSection> = Vec::new();
         for segment in mach.segments.iter() {
