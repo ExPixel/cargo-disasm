@@ -64,7 +64,6 @@ pub fn run() -> anyhow::Result<()> {
     let data = BinaryData::from_path(&binary_path)
         .with_context(|| format!("failed to load binary `{}`", binary_path.display()))?;
     let mut sources = Vec::new();
-    let mut sources_auto = false;
     for s in opts.symbol_sources.iter() {
         if s.eq_ignore_ascii_case("all") {
             // object file formats
@@ -79,7 +78,7 @@ pub fn run() -> anyhow::Result<()> {
 
             break;
         } else if s.eq_ignore_ascii_case("auto") {
-            sources_auto = true;
+            sources.clear();
             break;
         } else if s.eq_ignore_ascii_case("elf") {
             sources.push(SymbolSource::Elf);
@@ -105,11 +104,10 @@ pub fn run() -> anyhow::Result<()> {
             return Err(anyhow::anyhow!("{} is not a valid symbol source", s));
         }
     }
-    sources_auto |= sources.is_empty();
     sources.sort_unstable();
     sources.dedup();
 
-    let mut search_options = SearchOptions {
+    let search_options = SearchOptions {
         sources: &sources,
         dwarf_path: None,
         dsym_path: None,

@@ -68,7 +68,7 @@ impl DwarfInfo {
         &self,
         unit: &gimli::Unit<BinaryDataReader>,
         symbols: &mut Vec<Symbol>,
-        mut addr_to_offset: &mut F,
+        addr_to_offset: &mut F,
         name_chain: &mut NameChain,
     ) -> Result<(), gimli::Error>
     where
@@ -540,7 +540,7 @@ impl NameChain {
         if self.names.is_empty() {
             return ret;
         }
-        let mut reserve = self.length + (separator.len() * (self.names.len() - 1));
+        let reserve = self.length + (separator.len() * (self.names.len() - 1));
         ret.reserve(reserve);
 
         let mut first = true;

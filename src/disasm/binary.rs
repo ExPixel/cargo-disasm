@@ -506,10 +506,10 @@ impl Binary {
                 Self::get_mach_section_data_by_name(&self.data, &sections, section.name())
                     .map(|d| gimli::EndianReader::new(d, endian))
             };
-            let sup_loader = |section: gimli::SectionId| {
+            let sup_loader = |_section: gimli::SectionId| {
                 Ok(gimli::EndianReader::new(self.data.slice(0..0), endian))
             };
-            let dwarf = Box::new(DwarfInfo::new(loader, sup_loader)?);
+            let _dwarf = Box::new(DwarfInfo::new(loader, sup_loader)?);
         }
 
         if let (true, &Some(ref dwarf)) = (load_dwarf_symbols, &self.dwarf) {
@@ -547,7 +547,7 @@ impl Binary {
             return Ok(None);
         };
         log::trace!("found dSYM directory: {}", dsym_directory.display());
-        let mut object_path = {
+        let object_path = {
             let mut o_path = dsym_directory;
             o_path.push("Contents");
             o_path.push("Resources");
@@ -602,8 +602,9 @@ impl Binary {
             Self::get_mach_section_data_by_name(&data, &sections, section.name())
                 .map(|d| gimli::EndianReader::new(d, endian))
         };
-        let sup_loader =
-            |section: gimli::SectionId| Ok(gimli::EndianReader::new(self.data.slice(0..0), endian));
+        let sup_loader = |_section: gimli::SectionId| {
+            Ok(gimli::EndianReader::new(self.data.slice(0..0), endian))
+        };
         let dwarf = Box::new(DwarfInfo::new(loader, sup_loader)?);
 
         Ok(Some(dwarf))
@@ -628,11 +629,11 @@ impl Binary {
             .find(|path| path.is_dir())
     }
 
-    fn parse_pe_object(&mut self, pe: &PE) -> anyhow::Result<()> {
+    fn parse_pe_object(&mut self, _pe: &PE) -> anyhow::Result<()> {
         Err(anyhow::anyhow!("PE objects are not currently supported"))
     }
 
-    fn parse_archive_object(&mut self, archive: &Archive) -> anyhow::Result<()> {
+    fn parse_archive_object(&mut self, _archive: &Archive) -> anyhow::Result<()> {
         Err(anyhow::anyhow!(
             "archive objects are not currently supported"
         ))
