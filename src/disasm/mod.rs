@@ -94,7 +94,11 @@ fn capstone_for_binary(binary: &Binary) -> anyhow::Result<Capstone> {
     use capstone::{Arch as CapArch, Mode};
 
     let capstone_arch = match binary.arch() {
-        BinArch::Unknown => return Err(anyhow::anyhow!("unknown binary architecture")),
+        BinArch::Unknown => {
+            return Err(anyhow::anyhow!(
+                "unknown or unsupported binary architecture"
+            ))
+        }
         BinArch::X86 => CapArch::X86,
         BinArch::X86_64 => CapArch::X86,
         BinArch::Arm => CapArch::Arm,
