@@ -20,6 +20,11 @@ use std::io::{self, Read, Seek, SeekFrom};
 use std::path::{Path, PathBuf};
 use std::rc::Rc;
 
+/// Threshold for using all available sources when symbol sources is 'auto'.
+/// While there are less than `AUTO_SOURCES_THRESHOLD` symbols loaded
+/// and symsrc is `auto`, the binary may keep loading more sources.
+const AUTO_SOURCES_THRESHOLD: usize = 128 * 1024;
+
 pub struct Binary {
     /// Shared binary data. This must be pinned because it is referred to
     data: BinaryData,
@@ -230,7 +235,8 @@ impl Binary {
         }
 
         // If we're using `auto` for the symbol source and no symbols are found.
-        load_elf_symbols |= options.sources.is_empty() && self.symbols.is_empty();
+        load_elf_symbols |=
+            options.sources.is_empty() && self.symbols.len() < AUTO_SOURCES_THRESHOLD;
 
         if load_elf_symbols {
             log::info!("retrieving symbols from ELF object");
@@ -399,7 +405,8 @@ impl Binary {
         self.parse_mach_dwarf(&sections, load_dwarf_symbols)?;
 
         // If we're using `auto` for the symbol source and no symbols are found.
-        load_mach_symbols |= options.sources.is_empty() && self.symbols.is_empty();
+        load_mach_symbols |=
+            options.sources.is_empty() && self.symbols.len() < AUTO_SOURCES_THRESHOLD;
 
         if load_mach_symbols {
             log::info!("retrieving symbols from Mach-O object");
@@ -652,7 +659,8 @@ impl Binary {
             .context("error while gathering DWARF symbols")?;
 
         // If we're using `auto` for the symbol source and no symbols are found.
-        load_pe_symbols |= options.sources.is_empty() && self.symbols.is_empty();
+        load_pe_symbols |=
+            options.sources.is_empty() && self.symbols.len() < AUTO_SOURCES_THRESHOLD;
 
         if load_pe_symbols {
             log::info!("retrieving symbols from PE/COFF object");
