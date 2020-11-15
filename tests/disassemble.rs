@@ -15,16 +15,10 @@ pub fn disassemble() -> Result<(), Box<dyn Error>> {
     assert!(build_test_project.success());
 
     let disasm_test_project = cargo_disasm(&test_project_dir, "pow::my_pow")?;
-    // FIXME ignore windows for now.
-    if !cfg!(target_os = "windows") {
-        assert!(disasm_test_project.success());
-    }
+    assert!(disasm_test_project.success());
 
     let disasm_current_project = cargo_disasm(&manifest_dir, "cargo_disasm::main")?;
-    // FIXME ignore windows for now.
-    if !cfg!(target_os = "windows") {
-        assert!(disasm_current_project.success());
-    }
+    assert!(disasm_current_project.success());
 
     Ok(())
 }
