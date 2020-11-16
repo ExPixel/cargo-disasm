@@ -251,7 +251,23 @@ pub fn contains_dwarf(sections: &[Section]) -> bool {
     sections
         .iter()
         .filter_map(|section| section.name().ok())
-        .any(|name| DWARF_SECTIONS.contains(&name))
+        .any(|name| MACH_DWARF_SECTIONS.contains(&name) || DWARF_SECTIONS.contains(&name))
 }
 
 const MACH_TYPE_FUNC: u8 = 0x24;
+
+/// Names used for detecting DWARF debug information in Mach object files.
+const MACH_DWARF_SECTIONS: &[&str] = &[
+    "__debug_abbrev",
+    "__debug_addr",
+    "__debug_info",
+    "__debug_line",
+    "__debug_line_str",
+    "__debug_str",
+    "__debug_str_offsets",
+    "__debug_types",
+    "__debug_loc",
+    "__debug_loclists",
+    "__debug_ranges",
+    "__debug_rnglists",
+];
