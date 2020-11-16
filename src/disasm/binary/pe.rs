@@ -116,8 +116,16 @@ pub fn load_symbols(pe: &PE, data: &BinaryData, symbols: &mut Vec<Symbol>) -> an
     Ok(())
 }
 
-pub fn load_pdb(_pdb: BinaryData) -> anyhow::Result<Box<PDBInfo>> {
-    todo!("load pdb");
+pub fn load_pdb(pdb_data: BinaryData) -> anyhow::Result<Box<PDBInfo>> {
+    PDBInfo::new(pdb_data).map(Box::new)
+}
+
+pub fn load_pdb_symbols(
+    pe: &PE,
+    pdb: &mut PDBInfo,
+    symbols: &mut Vec<Symbol>,
+) -> anyhow::Result<()> {
+    pdb.load_symbols(pe.image_base as u64, symbols)
 }
 
 pub fn load_dwarf(pe: &PE, endian: Endian, data: &BinaryData) -> anyhow::Result<Box<DwarfInfo>> {

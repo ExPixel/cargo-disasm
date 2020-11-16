@@ -198,7 +198,7 @@ impl DwarfInfo {
                     }
                 } else {
                     name_chain.push(name);
-                    Ok(Some(Symbol::new(
+                    Ok(Some(Symbol::new_unmangled(
                         name_chain.combine("::"),
                         start,
                         off,

@@ -321,7 +321,20 @@ impl Binary {
             log::debug!("found PDB at `{}`", pdb_path.display());
             let pdb_data =
                 BinaryData::from_path(pdb_path).context("error while loading PDB data")?;
-            self.pdb = Some(pe::load_pdb(pdb_data)?);
+            let mut pdb = pe::load_pdb(pdb_data)?;
+            if load_pdb_symbols {
+                log::info!("retrieving symbols from PDB debug information");
+                let symbols_count_before = self.symbols.len();
+                let load_symbols_timer = std::time::Instant::now();
+                pe::load_pdb_symbols(pe, &mut pdb, &mut self.symbols)
+                    .context("error while gather PDB symbols")?;
+                log::trace!(
+                    "found {} symbols in PDB debug information in {}",
+                    self.symbols.len() - symbols_count_before,
+                    util::DurationDisplay(load_symbols_timer.elapsed())
+                );
+            }
+            self.pdb = Some(pdb);
         }
 
         if pe::contains_dwarf(pe) {
