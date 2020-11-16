@@ -1,3 +1,7 @@
+mod elf;
+mod mach;
+mod pe;
+
 use super::dwarf::DwarfInfo;
 use super::pdb::PDBInfo;
 use super::strmatch::{distance, Tokenizer};
@@ -191,24 +195,9 @@ impl Binary {
     }
 
     fn parse_elf_object(&mut self, elf: &Elf, options: SearchOptions) -> anyhow::Result<()> {
-        use goblin::elf::header;
-
-        log::debug!("object type   = ELF");
-
-        self.bits = Bits::from_elf_class(elf.header.e_ident[header::EI_CLASS]);
-        self.endian = Endian::from(
-            elf.header
-                .endianness()
-                .context("failed to identify ELF endianness")?,
-        );
-        self.arch = Arch::from_elf_machine(elf.header.e_machine);
-
-        log::debug!("object bits   = {}", self.bits);
-        log::debug!("object endian = {}", self.endian);
-        log::debug!("object arch   = {}", self.arch);
+        elf::load_arch_info(self, elf)?;
 
         let load_all_symbols_timer = std::time::Instant::now();
-
         let mut load_elf_symbols = false;
         let mut load_dwarf_symbols = options.sources.is_empty(); // `auto` makes this true
         options.sources.iter().for_each(|source| match source {
@@ -217,21 +206,22 @@ impl Binary {
             _ => {}
         });
 
-        let has_dwarf_debug_info = elf
-            .section_headers
-            .iter()
-            .filter_map(|header| {
-                // ugh
-                elf.shdr_strtab
-                    .get(header.sh_name)
-                    .transpose()
-                    .ok()
-                    .flatten()
-            })
-            .any(|name| DWARF_SECTIONS.contains(&name));
+        if elf::contains_dwarf(elf) {
+            let dwarf = elf::load_dwarf(elf, self)?;
+            if load_dwarf_symbols {
+                log::info!("retrieving symbols from DWARF debug information");
+                let symbols_count_before = self.symbols.len();
+                let load_symbols_timer = std::time::Instant::now();
 
-        if has_dwarf_debug_info {
-            self.parse_elf_dwarf(elf, load_dwarf_symbols)?;
+                elf::load_dwarf_symbols(elf, &dwarf, &mut self.symbols)?;
+
+                log::trace!(
+                    "found {} symbols in DWARF debug information in {}",
+                    self.symbols.len() - symbols_count_before,
+                    util::DurationDisplay(load_symbols_timer.elapsed())
+                );
+            }
+            self.dwarf = Some(dwarf);
         }
 
         // If we're using `auto` for the symbol source and no symbols are found.
@@ -242,7 +232,7 @@ impl Binary {
             log::info!("retrieving symbols from ELF object");
             let symbols_count_before = self.symbols.len();
             let load_symbols_timer = std::time::Instant::now();
-            self.gather_elf_symbols(elf)?;
+            elf::load_symbols(elf, &mut self.symbols)?;
             log::trace!(
                 "found {} symbols in ELF object in {}",
                 self.symbols.len() - symbols_count_before,
@@ -255,113 +245,6 @@ impl Binary {
             self.symbols.len(),
             util::DurationDisplay(load_all_symbols_timer.elapsed())
         );
-
-        Ok(())
-    }
-
-    fn parse_elf_dwarf(&mut self, elf: &Elf, load_dwarf_symbols: bool) -> anyhow::Result<()> {
-        use gimli::EndianReader;
-        use gimli::RunTimeEndian;
-
-        let endian = RunTimeEndian::from(self.endian);
-
-        let loader = |section: gimli::SectionId| {
-            self.get_elf_section_data_by_name(&elf, section.name())
-                .map(|d| EndianReader::new(d, endian))
-        };
-        let sup_loader =
-            |_section: gimli::SectionId| Ok(EndianReader::new(self.data.slice(0..0), endian));
-        let dwarf = Box::new(DwarfInfo::new(loader, sup_loader)?);
-
-        if load_dwarf_symbols {
-            log::info!("retrieving symbols from DWARF debug information");
-
-            let mut sections: Vec<(std::ops::Range<u64>, usize)> = elf
-                .section_headers
-                .iter()
-                .filter(|header| header.sh_addr != 0) // does not appear in the process memory
-                .map(|header| {
-                    (
-                        header.sh_addr..(header.sh_addr + header.sh_size),
-                        header.sh_offset as usize,
-                    )
-                })
-                .collect();
-            sections.sort_unstable_by(|(lhs, _), (rhs, _)| {
-                lhs.start.cmp(&rhs.start).then(lhs.end.cmp(&rhs.end))
-            });
-
-            let addr_to_offset = |addr| {
-                sections
-                    .binary_search_by(|(probe, _)| util::cmp_range_to_idx(probe, addr))
-                    .ok()
-                    .map(|idx| {
-                        let &(ref range, off) = &sections[idx];
-                        (addr - range.start) as usize + off
-                    })
-            };
-
-            let symbols_count_before = self.symbols.len();
-            let load_symbols_timer = std::time::Instant::now();
-            dwarf.load_symbols(&mut self.symbols, addr_to_offset)?;
-            log::trace!(
-                "found {} symbols in DWARF debug information in {}",
-                self.symbols.len() - symbols_count_before,
-                util::DurationDisplay(load_symbols_timer.elapsed())
-            );
-        }
-        self.dwarf = Some(dwarf);
-        Ok(())
-    }
-
-    fn gather_elf_symbols(&mut self, elf: &Elf) -> anyhow::Result<()> {
-        for sym in elf.syms.iter().filter(|sym| sym.is_function()) {
-            // FIXME handle symbols with a size of 0 (usually external symbols).
-            if sym.st_size == 0 {
-                continue;
-            }
-
-            // FIXME maybe the error here should just be a warning instead. I'm pretty sure it's
-            // recoverable :|
-            let sym_name = if let Some(name) = elf
-                .strtab
-                .get(sym.st_name)
-                .transpose()
-                .context("failed to get ELF symbol name")?
-            {
-                name
-            } else {
-                continue;
-            };
-
-            let (section_offset, section_addr) = {
-                let sym_section = elf.section_headers.get(sym.st_shndx).ok_or_else(|| {
-                    anyhow::anyhow!(
-                        "no matching section header for {} (header-idx: {})",
-                        sym_name,
-                        sym.st_shndx
-                    )
-                })?;
-                (sym_section.sh_offset, sym_section.sh_addr)
-            };
-
-            // FIXME clamp values to section bounds.
-            // FIXME This works for executable and shared objects that use st_value as a virtual
-            // address to the symbol, but I also want to handle relocatable files, in which case
-            // st_value would hold a section offset for the symbol.
-            let sym_addr = sym.st_value;
-            let sym_offset = (sym_addr - section_addr) + section_offset;
-
-            self.symbols.push(Symbol::new(
-                sym_name,
-                sym_addr,
-                sym_offset as usize,
-                sym.st_size as usize,
-                SymbolType::Function,
-                SymbolSource::Elf,
-                SymbolLang::Unknown,
-            ));
-        }
 
         Ok(())
     }
@@ -873,24 +756,6 @@ impl Binary {
         } else {
             Ok(data.slice(0..0))
         }
-    }
-
-    fn get_elf_section_data_by_name(&self, elf: &Elf, name: &str) -> anyhow::Result<BinaryData> {
-        for section in elf.section_headers.iter() {
-            let section_name = elf
-                .shdr_strtab
-                .get(section.sh_name)
-                .transpose()
-                .context("failed to retrieve ELF section name")?;
-
-            if section_name == Some(name) {
-                let start = section.sh_offset as usize;
-                let end = start + section.sh_size as usize;
-                return Ok(self.data.slice(start..end));
-            }
-        }
-
-        Ok(self.data.slice(0..0))
     }
 }
 
