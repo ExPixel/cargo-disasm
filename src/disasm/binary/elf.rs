@@ -93,8 +93,8 @@ pub fn load_dwarf(elf: &Elf, endian: Endian, data: &BinaryData) -> anyhow::Resul
 }
 
 pub fn load_dwarf_symbols(
-    elf: &Elf,
     dwarf: &DwarfInfo,
+    elf: &Elf,
     symbols: &mut Vec<Symbol>,
 ) -> anyhow::Result<()> {
     let mut sections: Vec<(std::ops::Range<u64>, usize)> = elf
@@ -122,8 +122,6 @@ pub fn load_dwarf_symbols(
             })
     };
 
-    let symbols_count_before = symbols.len();
-    let load_symbols_timer = std::time::Instant::now();
     dwarf.load_symbols(symbols, addr_to_offset)?;
 
     Ok(())

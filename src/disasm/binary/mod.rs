@@ -8,14 +8,8 @@ use super::strmatch::{distance, Tokenizer};
 use super::symbol::{Symbol, SymbolLang, SymbolSource, SymbolType};
 use crate::util;
 use anyhow::Context as _;
-use goblin::mach::segment::Section as MachSection;
-use goblin::{
-    archive::Archive,
-    elf::Elf,
-    mach::{Mach, MachO},
-    pe::PE,
-    Object,
-};
+
+use goblin::{archive::Archive, elf::Elf, mach::MachO, pe::PE, Object};
 use memmap::{Mmap, MmapOptions};
 use std::convert::TryFrom as _;
 use std::fmt;
@@ -213,7 +207,7 @@ impl Binary {
                 let symbols_count_before = self.symbols.len();
                 let load_symbols_timer = std::time::Instant::now();
 
-                elf::load_dwarf_symbols(elf, &dwarf, &mut self.symbols)?;
+                elf::load_dwarf_symbols(&dwarf, elf, &mut self.symbols)?;
 
                 log::trace!(
                     "found {} symbols in DWARF debug information in {}",
