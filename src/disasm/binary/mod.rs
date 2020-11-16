@@ -207,7 +207,7 @@ impl Binary {
         });
 
         if elf::contains_dwarf(elf) {
-            let dwarf = elf::load_dwarf(elf, self)?;
+            let dwarf = elf::load_dwarf(elf, self.endian, &self.data)?;
             if load_dwarf_symbols {
                 log::info!("retrieving symbols from DWARF debug information");
                 let symbols_count_before = self.symbols.len();
@@ -250,42 +250,35 @@ impl Binary {
     }
 
     fn parse_mach_object(&mut self, mach: &MachO, options: SearchOptions) -> anyhow::Result<()> {
-        log::debug!("object type   = Mach-O");
-
-        self.bits = if mach.is_64 {
-            Bits::Bits64
-        } else {
-            Bits::Bits32
-        };
-        self.endian = if mach.little_endian {
-            Endian::Little
-        } else {
-            Endian::Big
-        };
-        self.arch = Arch::from_mach_cpu_types(mach.header.cputype, mach.header.cpusubtype);
-
-        log::debug!("object bits   = {}", self.bits);
-        log::debug!("object endian = {}", self.endian);
-        log::debug!("object arch   = {}", self.arch);
+        mach::load_arch_info(self, mach)?;
 
         let load_all_symbols_timer = std::time::Instant::now();
         let mut load_mach_symbols = false;
-        let mut load_dwarf_symbols = options.sources.is_empty();
+        let mut load_dwarf_symbols = options.sources.is_empty(); // `auto` makes this true
         options.sources.iter().for_each(|source| match source {
             SymbolSource::Mach => load_mach_symbols = true,
             SymbolSource::Dwarf => load_dwarf_symbols = true,
             _ => {}
         });
 
-        let mut sections: Vec<MachSection> = Vec::new();
-        for segment in mach.segments.iter() {
-            for s in segment.into_iter() {
-                let (section, _) = s.context("error occured while getting Mach-O section")?;
-                sections.push(section);
-            }
-        }
+        let sections = mach::load_sections(mach)?;
 
-        self.parse_mach_dwarf(&sections, load_dwarf_symbols)?;
+        if let Some(dwarf) = mach::load_dwarf(&sections, self.endian, &self.data)? {
+            if load_dwarf_symbols {
+                log::info!("retrieving symbols from DWARF debug information");
+                let symbols_count_before = self.symbols.len();
+                let load_symbols_timer = std::time::Instant::now();
+
+                mach::load_dwarf_symbols(&dwarf, &sections, &mut self.symbols)?;
+
+                log::trace!(
+                    "found {} symbols in DWARF debug information in {}",
+                    self.symbols.len() - symbols_count_before,
+                    util::DurationDisplay(load_symbols_timer.elapsed())
+                );
+            }
+            self.dwarf = Some(dwarf);
+        }
 
         // If we're using `auto` for the symbol source and no symbols are found.
         load_mach_symbols |=
@@ -295,7 +288,7 @@ impl Binary {
             log::info!("retrieving symbols from Mach-O object");
             let symbols_count_before = self.symbols.len();
             let load_symbols_timer = std::time::Instant::now();
-            self.gather_mach_symbols(mach, &sections)?;
+            mach::load_symbols(mach, &sections, &mut self.symbols)?;
             log::trace!(
                 "found {} symbols in Mach-O object in {}",
                 self.symbols.len() - symbols_count_before,
@@ -310,208 +303,6 @@ impl Binary {
         );
 
         Ok(())
-    }
-
-    fn gather_mach_symbols(
-        &mut self,
-        mach: &MachO,
-        sections: &[MachSection],
-    ) -> anyhow::Result<()> {
-        use goblin::mach::symbols;
-
-        // The starting index for Mach symbols in the `symbols` vector.
-        let mach_symbols_idx = self.symbols.len();
-
-        // A list of ALL symbol addresses (even non-function symbols).
-        // This will be used for figuring out where symbols end.
-        let mut symbol_addresses = Vec::<u64>::with_capacity(32);
-
-        let mut symbols_it = mach.symbols();
-        while let Some(Ok((sym_name, sym))) = symbols_it.next() {
-            if sym.n_sect == symbols::NO_SECT as usize || !sym.is_stab() {
-                continue;
-            }
-
-            let sym_addr = sym.n_value;
-            symbol_addresses.push(sym_addr);
-
-            if sym.n_type != MACH_TYPE_FUNC || sym_name.is_empty() {
-                continue;
-            }
-
-            let sym_offset = if let Some(section) = sections.get(sym.n_sect - 1) {
-                (sym_addr - section.addr) as usize + section.offset as usize
-            } else {
-                continue;
-            };
-
-            self.symbols.push(Symbol::new(
-                sym_name,
-                sym_addr,
-                sym_offset as usize,
-                0, // this is fixed later
-                SymbolType::Function,
-                SymbolSource::Mach,
-                SymbolLang::Unknown,
-            ));
-        }
-
-        symbol_addresses.sort_unstable();
-        symbol_addresses.dedup();
-
-        // Figure out where symbols end by using the starting address of the next symbol.
-        for symbol in &mut self.symbols[mach_symbols_idx..] {
-            if let Ok(idx) = symbol_addresses.binary_search(&symbol.address()) {
-                if let Some(next_addr) = symbol_addresses.get(idx + 1) {
-                    symbol.set_size((next_addr - symbol.address()) as usize);
-                    continue;
-                }
-            };
-            symbol.set_address(0);
-        }
-
-        Ok(())
-    }
-
-    fn parse_mach_dwarf(
-        &mut self,
-        sections: &[MachSection],
-        load_dwarf_symbols: bool,
-    ) -> anyhow::Result<()> {
-        match self.load_dsym_dwarf().context("failed to load mach DWARF") {
-            Ok(maybe_dwarf) => self.dwarf = maybe_dwarf,
-            Err(err) => log::warn!("{:?}", err),
-        }
-
-        // If we don't load a DWARF from an external source, use the current
-        // Mach binary.
-        if self.dwarf.is_none() {
-            let endian = gimli::RunTimeEndian::from(self.endian);
-            let loader = |section: gimli::SectionId| {
-                Self::get_mach_section_data_by_name(&self.data, &sections, section.name())
-                    .map(|d| gimli::EndianReader::new(d, endian))
-            };
-            let sup_loader = |_section: gimli::SectionId| {
-                Ok(gimli::EndianReader::new(self.data.slice(0..0), endian))
-            };
-            let _dwarf = Box::new(DwarfInfo::new(loader, sup_loader)?);
-        }
-
-        if let (true, &Some(ref dwarf)) = (load_dwarf_symbols, &self.dwarf) {
-            log::info!("retrieving symbols from DWARF debug information");
-
-            let addr_to_offset = |addr| {
-                sections
-                    .binary_search_by(|probe| {
-                        util::cmp_range_to_idx(
-                            &(probe.addr..(probe.addr + probe.size as u64)),
-                            addr,
-                        )
-                    })
-                    .ok()
-                    .map(|idx| (addr - sections[idx].addr) as usize + sections[idx].offset as usize)
-            };
-
-            let symbols_count_before = self.symbols.len();
-            let load_symbols_timer = std::time::Instant::now();
-            dwarf.load_symbols(&mut self.symbols, addr_to_offset)?;
-            log::trace!(
-                "found {} symbols in DWARF debug information in {}",
-                self.symbols.len() - symbols_count_before,
-                util::DurationDisplay(load_symbols_timer.elapsed())
-            );
-        }
-        Ok(())
-    }
-
-    /// Find and load the DWARF object file from the dSYM directory.
-    fn load_dsym_dwarf(&self) -> anyhow::Result<Option<Box<DwarfInfo>>> {
-        let dsym_directory = if let Some(d) = self.find_dsym_directory() {
-            d
-        } else {
-            return Ok(None);
-        };
-        log::trace!("found dSYM directory: {}", dsym_directory.display());
-        let object_path = {
-            let mut o_path = dsym_directory;
-            o_path.push("Contents");
-            o_path.push("Resources");
-            o_path.push("DWARF");
-            if let Some(fname) = self.data.path().file_name() {
-                o_path.push(fname);
-            } else {
-                return Ok(None);
-            }
-            o_path
-        };
-
-        if !object_path.is_file() {
-            log::trace!(
-                "did not find dSYM DWARF object file at expected path: {}",
-                object_path.display()
-            );
-            return Ok(None);
-        } else {
-            log::trace!(
-                "located dSYM DWARF object file at {}",
-                object_path.display()
-            );
-        }
-
-        let data =
-            BinaryData::from_path(&object_path).context("failed to load Mach-O DWARF binary")?;
-        let mach = Mach::parse(&data)
-            .with_context(|| format!("failed to parse Mach-O binary {}", object_path.display()))?;
-        let mach = match mach {
-            goblin::mach::Mach::Fat(multi) => multi
-                .get(0)
-                .context("failed to get first object from fat Mach binary")?,
-            goblin::mach::Mach::Binary(obj) => obj,
-        };
-
-        let mut sections: Vec<MachSection> = Vec::new();
-        for segment in mach.segments.iter() {
-            for s in segment.into_iter() {
-                let (section, _) = s.context("error occured while getting Mach-O section")?;
-                sections.push(section);
-            }
-        }
-        sections.sort_unstable_by_key(|section| section.addr);
-
-        let endian = if mach.little_endian {
-            gimli::RunTimeEndian::Little
-        } else {
-            gimli::RunTimeEndian::Big
-        };
-        let loader = |section: gimli::SectionId| {
-            Self::get_mach_section_data_by_name(&data, &sections, section.name())
-                .map(|d| gimli::EndianReader::new(d, endian))
-        };
-        let sup_loader = |_section: gimli::SectionId| {
-            Ok(gimli::EndianReader::new(self.data.slice(0..0), endian))
-        };
-        let dwarf = Box::new(DwarfInfo::new(loader, sup_loader)?);
-
-        Ok(Some(dwarf))
-    }
-
-    /// Find the dSYM directory relative to the currently
-    /// loaded executable.
-    fn find_dsym_directory(&self) -> Option<PathBuf> {
-        let executable_dir = self.data.path().parent()?;
-        let entries = executable_dir.read_dir().ok().or_else(|| {
-            log::warn!("failed to open `{}` as directory", executable_dir.display());
-            None
-        })?;
-
-        entries
-            .filter_map(|entry| entry.map(|e| e.path()).ok())
-            .filter(|path| {
-                path.file_name()
-                    .filter(|n| n.to_string_lossy().ends_with(".dSYM"))
-                    .is_some()
-            })
-            .find(|path| path.is_dir())
     }
 
     fn parse_pe_object(&mut self, pe: &PE, options: SearchOptions) -> anyhow::Result<()> {
@@ -730,32 +521,6 @@ impl Binary {
         Err(anyhow::anyhow!(
             "archive objects are not currently supported"
         ))
-    }
-
-    fn get_mach_section_data_by_name(
-        data: &BinaryData,
-        sections: &[MachSection],
-        name: &str,
-    ) -> anyhow::Result<BinaryData> {
-        let dot = name.starts_with('.');
-
-        if let Some(section) = sections.iter().find(|section| {
-            if let Ok(section_name) = section.name() {
-                if section_name.starts_with("__") && dot {
-                    section_name[2..] == name[1..]
-                } else {
-                    section_name == name
-                }
-            } else {
-                false
-            }
-        }) {
-            let start = section.offset as usize;
-            let end = start + section.size as usize;
-            Ok(data.slice(start..end))
-        } else {
-            Ok(data.slice(0..0))
-        }
     }
 }
 
@@ -1039,8 +804,6 @@ const DWARF_SECTIONS: &[&str] = &[
     ".debug_ranges",
     ".debug_rnglists",
 ];
-
-const MACH_TYPE_FUNC: u8 = 0x24;
 
 pub struct SearchOptions<'a> {
     pub sources: &'a [SymbolSource],

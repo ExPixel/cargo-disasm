@@ -77,18 +77,17 @@ pub fn load_symbols(elf: &Elf, symbols: &mut Vec<Symbol>) -> anyhow::Result<()> 
     Ok(())
 }
 
-pub fn load_dwarf(elf: &Elf, binary: &Binary) -> anyhow::Result<Box<DwarfInfo>> {
+pub fn load_dwarf(elf: &Elf, endian: Endian, data: &BinaryData) -> anyhow::Result<Box<DwarfInfo>> {
     use gimli::EndianReader;
     use gimli::RunTimeEndian;
 
-    let endian = RunTimeEndian::from(binary.endian);
+    let endian = RunTimeEndian::from(endian);
 
     let loader = |section: gimli::SectionId| {
-        section_by_name(elf, section.name(), &binary.data).map(|d| EndianReader::new(d, endian))
+        section_by_name(elf, section.name(), &data).map(|d| EndianReader::new(d, endian))
     };
 
-    let sup_loader =
-        |_section: gimli::SectionId| Ok(EndianReader::new(binary.data.slice(0..0), endian));
+    let sup_loader = |_section: gimli::SectionId| Ok(EndianReader::new(data.slice(0..0), endian));
 
     Ok(Box::new(DwarfInfo::new(loader, sup_loader)?))
 }
