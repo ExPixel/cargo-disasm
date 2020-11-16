@@ -83,7 +83,7 @@ impl PDBInfo {
             //       and returns errors for unsupported symbol types.
             let data = match symbol.parse() {
                 Ok(data) => data,
-                Err(err) => continue,
+                Err(_err) => continue,
             };
 
             if let SymbolData::Procedure(procedure) = data {
