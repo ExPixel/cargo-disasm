@@ -41,21 +41,28 @@ cargo disasm --release --symsrc=all foo::bar::baz
 > be able to figure this out on its own soon.
 
 # TODO
-- [ ] Optional arrows for displaying jump sources and targets
 - [ ] Showing source code alongside disassembly
-- [ ] Syntax highlighting for disassembly
 
 **Windows**  
-- [ ] PE/COFF file disassembly and symbol discovery
-- [ ] use PDB for symbol discovery and line information
+- [x] PE/COFF file disassembly and symbol discovery
+- [x] use PDB for symbol discovery *(MSVC toolchain)*
+- [ ] use DWARF for symbol discovery *(GNU)*
 
 **MacOS**  
 - [x] Mach file disassembly and symbol discovery
-- [x] use dSYM (DWARF) for symbol discovery and line information
+- [x] use dSYM (DWARF) for symbol discovery
 
 **Linux**  
 - [x] ELF file disassembly and symbol discovery
-- [x] use DWARF for symbol discovery and line information
+- [x] use DWARF for symbol discovery
+
+**Line Information**
+- [ ] use DWARF for line information
+- [ ] use PDB for line information
+
+**Postponed**
+- ~~Syntax highlighting for disassembly~~ (good for higher level source code, unecessary for assembly)
+- ~~Optional arrows for displaying jump sources and targets~~ (too noisy)
 
 [crate]: https://crates.io/crates/cargo-disasm
 [crate-shield]: https://img.shields.io/crates/v/cargo-disasm?style=flat-square
