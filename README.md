@@ -9,8 +9,8 @@ cargo-disasm
 
 > **This is still under heavy development**
 >
-> For now `cargo-disasm` can disassemble symbols from `ELF` object files
-> for binary crates and make use of DWARF debug information for symbol discovery.
+> For now `cargo-disasm` can disassemble symbols from `ELF` *(Linux)*, `Mach` *(MacOS)*, an `PE/COFF` *(Windows)* object files
+> for binary crates and make use of DWARF and PDB debug information for symbol discovery.
 > Check [here](#todo) to see the current progress.
 
 ```sh
