@@ -45,7 +45,7 @@ pub struct Opts {
     #[clap(long = "release")]
     pub release: bool,
 
-    /// Sets the log level: 0 - +warning +error, 1 - +info, 2 - +debug, 3 - +trace
+    /// Sets the log level: (default)=+error, 0=+warning, 1=+info, 2=+debug, 3=+trace
     /// The `quiet` flag can be used to turn off logging completely.
     #[clap(short, long, parse(from_occurrences))]
     pub verbose: u32,
