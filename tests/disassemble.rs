@@ -4,7 +4,20 @@ use std::path::Path;
 use std::process::{Command, ExitStatus};
 
 #[test]
-pub fn disassemble() -> Result<(), Box<dyn Error>> {
+pub fn disassemble_cargo_disasm() -> Result<(), Box<dyn Error>> {
+    let manifest_dir = Path::new(env!("CARGO_MANIFEST_DIR"));
+
+    let build_project = cargo_build(&manifest_dir)?;
+    assert!(build_project.success());
+
+    let disasm_current_project = cargo_disasm(&manifest_dir, "cargo_disasm::main")?;
+    assert!(disasm_current_project.success());
+
+    Ok(())
+}
+
+#[test]
+pub fn disassemble_pow() -> Result<(), Box<dyn Error>> {
     let manifest_dir = Path::new(env!("CARGO_MANIFEST_DIR"));
     let test_project_dir = manifest_dir.join("assets").join("pow");
 
@@ -16,9 +29,6 @@ pub fn disassemble() -> Result<(), Box<dyn Error>> {
 
     let disasm_test_project = cargo_disasm(&test_project_dir, "pow::my_pow")?;
     assert!(disasm_test_project.success());
-
-    let disasm_current_project = cargo_disasm(&manifest_dir, "cargo_disasm::main")?;
-    assert!(disasm_current_project.success());
 
     Ok(())
 }
