@@ -1,0 +1,55 @@
+name: Create Test Artifacts
+
+on:
+  push:
+    branches: [ main ]
+  pull_request:
+    branches: [ main ]
+
+env:
+  CARGO_TERM_COLOR: always
+
+jobs:
+
+  build_linux_x86_64:
+    name: Build Linux x86_64
+    runs-on: ubuntu-latest
+    steps:
+    - uses: actions/checkout@v2
+      with:
+        submodules: recursive
+    - uses: actions-rs/toolchain@v1
+      with:
+        toolchain: stable
+        default: true
+        override: true
+    - uses: actions-rs/cargo@v1
+      with:
+        command: build
+        args: --target x86_64-unknown-linux-gnu
+    - uses: actions/upload-artifact@v2
+      with:
+        name: pow-linux-x86_64
+        path: assets/pow/
+
+  build_linux_i686:
+    name: Build Linux i686
+    runs-on: ubuntu-latest
+    steps:
+    - uses: actions/checkout@v2
+      with:
+        submodules: recursive
+    - uses: actions-rs/toolchain@v1
+      with:
+        target: i686-unknown-linux-gnu
+        toolchain: stable
+          default: true
+          override: true
+    - uses: actions-rs/cargo@v1
+      with:
+        command: build
+        args: --target i686-unknown-linux-gnu
+    - uses: actions/upload-artifact@v2
+      with:
+        name: pow-linux-i686
+        path: assets/pow/
