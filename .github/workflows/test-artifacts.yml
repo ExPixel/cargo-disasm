@@ -15,7 +15,8 @@ jobs:
     name: Build Linux x86_64
     runs-on: ubuntu-latest
     defaults:
-      working-directory: assets/pow
+      run:
+        working-directory: assets/pow
     steps:
     - uses: actions/checkout@v2
       with:
@@ -39,7 +40,8 @@ jobs:
     name: Build Linux i686
     runs-on: ubuntu-latest
     defaults:
-      working-directory: assets/pow
+      run:
+        working-directory: assets/pow
     steps:
     - uses: actions/checkout@v2
       with:
