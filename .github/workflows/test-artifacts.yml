@@ -43,8 +43,8 @@ jobs:
       with:
         target: i686-unknown-linux-gnu
         toolchain: stable
-          default: true
-          override: true
+        default: true
+        override: true
     - uses: actions-rs/cargo@v1
       with:
         command: build
