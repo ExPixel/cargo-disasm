@@ -69,7 +69,7 @@ jobs:
         submodules: recursive
     - uses: actions-rs/toolchain@v1
       with:
-        toolchain: stable
+        toolchain: beta
         profile: minimal
         default: true
         override: true
@@ -164,17 +164,6 @@ jobs:
     - uses: actions/upload-artifact@v2
       with:
         name: pow-windows-gnu-x86_64
-        path: assets/pow
-    - name: Clean
-      run: cargo clean
-      working-directory: assets/pow
-
-    - name: Build gnu-i686
-      run: cargo build --target i686-pc-windows-gnu
-      working-directory: assets/pow
-    - uses: actions/upload-artifact@v2
-      with:
-        name: pow-windows-gnu-i686
         path: assets/pow
     - name: Clean
       run: cargo clean
