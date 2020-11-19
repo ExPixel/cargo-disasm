@@ -11,8 +11,8 @@ env:
 
 jobs:
 
-  build_linux_x86_64:
-    name: Build Linux x86_64
+  build_linux:
+    name: Build Linux
     runs-on: ubuntu-latest
     steps:
     - uses: actions/checkout@v2
@@ -24,36 +24,38 @@ jobs:
         profile: minimal
         default: true
         override: true
-    - uses: actions-rs/cargo@v1
-      with:
-        command: build
-        args: --target x86_64-unknown-linux-gnu
+    - name: Install Cross
+      run: cargo install cross
+
+    - name: Build x86_64
+      run: cross build --target x86_64-unknown-linux-gnu
       working-directory: assets/pow
     - uses: actions/upload-artifact@v2
       with:
         name: pow-linux-x86_64
         path: assets/pow
+    - name: Clean
+      run: cargo clean
+      working-directory: assets/pow
 
-  build_linux_i686:
-    name: Build Linux i686
-    runs-on: ubuntu-latest
-    steps:
-    - uses: actions/checkout@v2
-      with:
-        submodules: recursive
-    - uses: actions-rs/toolchain@v1
-      with:
-        target: i686-unknown-linux-gnu
-        toolchain: stable
-        profile: minimal
-        default: true
-        override: true
-    - uses: actions-rs/cargo@v1
-      with:
-        command: build
-        args: --target i686-unknown-linux-gnu
+    - name: Build i686
+      run: cross build --target i686-unknown-linux-gnu
       working-directory: assets/pow
     - uses: actions/upload-artifact@v2
       with:
         name: pow-linux-i686
         path: assets/pow
+    - name: Clean
+      run: cargo clean
+      working-directory: assets/pow
+
+    - name: Build AArch64
+      run: cross build --target aarch64-unknown-linux-gnu
+      working-directory: assets/pow
+    - uses: actions/upload-artifact@v2
+      with:
+        name: pow-linux-aarch64
+        path: assets/pow
+    - name: Clean
+      run: cargo clean
+      working-directory: assets/pow
