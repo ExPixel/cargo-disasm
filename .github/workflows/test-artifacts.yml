@@ -14,9 +14,6 @@ jobs:
   build_linux_x86_64:
     name: Build Linux x86_64
     runs-on: ubuntu-latest
-    defaults:
-      run:
-        working-directory: assets/pow
     steps:
     - uses: actions/checkout@v2
       with:
@@ -31,17 +28,15 @@ jobs:
       with:
         command: build
         args: --target x86_64-unknown-linux-gnu
+      working-directory: assets/pow
     - uses: actions/upload-artifact@v2
       with:
         name: pow-linux-x86_64
-        path: .
+        path: assets/pow
 
   build_linux_i686:
     name: Build Linux i686
     runs-on: ubuntu-latest
-    defaults:
-      run:
-        working-directory: assets/pow
     steps:
     - uses: actions/checkout@v2
       with:
@@ -57,7 +52,8 @@ jobs:
       with:
         command: build
         args: --target i686-unknown-linux-gnu
+      working-directory: assets/pow
     - uses: actions/upload-artifact@v2
       with:
         name: pow-linux-i686
-        path: .
+        path: assets/pow
