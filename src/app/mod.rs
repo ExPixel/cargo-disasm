@@ -140,6 +140,7 @@ fn find_binary_path(opts: &Opts) -> anyhow::Result<PathBuf> {
 
     log::trace!("running cargo_metadata");
     let mut cmd = MetadataCommand::new();
+    cmd.no_deps();
     if let Some(ref m) = opts.manifest_path {
         cmd.manifest_path(m);
     }
