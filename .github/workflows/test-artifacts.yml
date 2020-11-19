@@ -68,8 +68,9 @@ jobs:
       with:
         submodules: recursive
  
-    - name: XCode Select
-      run: sudo xcode-select -s /Applications/Xcode_12_beta.app
+# Reenable with aarch64-apple-darwin
+#     - name: XCode Select
+#       run: sudo xcode-select -s /Applications/Xcode_12_beta.app
 
     - uses: actions-rs/toolchain@v1
       with:
@@ -96,16 +97,17 @@ jobs:
       run: cargo clean
       working-directory: assets/pow
 
-    - name: Build AArch64
-      run: SDKROOT=$(xcrun -sdk macosx11.0 --show-sdk-path) MACOSX_DEPLOYMENT_TARGET=$(xcrun -sdk macosx11.0 --show-sdk-platform-version) cargo build --target=aarch64-apple-darwin
-      working-directory: assets/pow
-    - uses: actions/upload-artifact@v2
-      with:
-        name: pow-macos-aarch64
-        path: assets/pow
-    - name: Clean
-      run: cargo clean
-      working-directory: assets/pow
+# TODO reenable this at some point
+#     - name: Build AArch64
+#       run: SDKROOT=$(xcrun -sdk macosx11.0 --show-sdk-path) MACOSX_DEPLOYMENT_TARGET=$(xcrun -sdk macosx11.0 --show-sdk-platform-version) cargo build --target=aarch64-apple-darwin
+#       working-directory: assets/pow
+#     - uses: actions/upload-artifact@v2
+#       with:
+#         name: pow-macos-aarch64
+#         path: assets/pow
+#     - name: Clean
+#       run: cargo clean
+#       working-directory: assets/pow
 
   build_windows:
     name: Build Windows
