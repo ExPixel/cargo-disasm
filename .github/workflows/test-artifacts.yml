@@ -59,3 +59,112 @@ jobs:
     - name: Clean
       run: cargo clean
       working-directory: assets/pow
+
+  build_macos:
+    name: Build MacOs
+    runs-on: macOS-latest
+    steps:
+    - uses: actions/checkout@v2
+      with:
+        submodules: recursive
+    - uses: actions-rs/toolchain@v1
+      with:
+        toolchain: stable
+        profile: minimal
+        default: true
+        override: true
+    - name: Install Cross
+      run: cargo install cross
+
+    - name: Build x86_64
+      run: cross build --target x86_64-apple-darwin
+      working-directory: assets/pow
+    - uses: actions/upload-artifact@v2
+      with:
+        name: pow-macos-x86_64
+        path: assets/pow
+    - name: Clean
+      run: cargo clean
+      working-directory: assets/pow
+
+    - name: Build AArch64
+      run: cross build --target aarch64-apple-darwin
+      working-directory: assets/pow
+    - uses: actions/upload-artifact@v2
+      with:
+        name: pow-macos-aarch64
+        path: assets/pow
+    - name: Clean
+      run: cargo clean
+      working-directory: assets/pow
+
+  build_windows:
+    name: Build Windows
+    runs-on: windows-latest
+    steps:
+    - uses: actions/checkout@v2
+      with:
+        submodules: recursive
+    - uses: actions-rs/toolchain@v1
+      with:
+        toolchain: stable
+        profile: minimal
+        default: true
+        override: true
+    - name: Install Cross
+      run: cargo install cross
+
+    - name: Build msvc-x86_64
+      run: cross build --target x86_64-pc-windows-msvc
+      working-directory: assets/pow
+    - uses: actions/upload-artifact@v2
+      with:
+        name: pow-windows-msvc-x86_64
+        path: assets/pow
+    - name: Clean
+      run: cargo clean
+      working-directory: assets/pow
+
+    - name: Build msvc-i686
+      run: cross build --target i686-pc-windows-msvc
+      working-directory: assets/pow
+    - uses: actions/upload-artifact@v2
+      with:
+        name: pow-windows-msvc-i686
+        path: assets/pow
+    - name: Clean
+      run: cargo clean
+      working-directory: assets/pow
+
+    - name: Build msvc-AArch64
+      run: cross build --target aarch64-pc-windows-msvc
+      working-directory: assets/pow
+    - uses: actions/upload-artifact@v2
+      with:
+        name: pow-windows-msvc-aarch64
+        path: assets/pow
+    - name: Clean
+      run: cargo clean
+      working-directory: assets/pow
+
+    - name: Build gnu-x86_64
+      run: cross build --target x86_64-pc-windows-gnu
+      working-directory: assets/pow
+    - uses: actions/upload-artifact@v2
+      with:
+        name: pow-windows-gnu-x86_64
+        path: assets/pow
+    - name: Clean
+      run: cargo clean
+      working-directory: assets/pow
+
+    - name: Build gnu-i686
+      run: cross build --target i686-pc-windows-gnu
+      working-directory: assets/pow
+    - uses: actions/upload-artifact@v2
+      with:
+        name: pow-windows-gnu-i686
+        path: assets/pow
+    - name: Clean
+      run: cargo clean
+      working-directory: assets/pow
