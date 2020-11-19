@@ -74,7 +74,7 @@ impl Symbol {
                     Cow::from(s.to_string())
                 })
             })
-            .unwrap_or_else(|_| name);
+            .unwrap_or(name);
 
         Symbol {
             name: demangled_name.into_owned(),
