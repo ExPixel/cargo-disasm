@@ -73,11 +73,16 @@ jobs:
         profile: minimal
         default: true
         override: true
-    - name: Install Cross
-      run: cargo install cross
+
+    - name: Install Targets
+      run: |
+        rustup target add x86_64-apple-darwin
+        rustup target add aarch64-apple-darwin
+    - name: List Targets
+      run: rustup target list --installed
 
     - name: Build x86_64
-      run: cross build --target x86_64-apple-darwin
+      run: cargo build --target x86_64-apple-darwin
       working-directory: assets/pow
     - uses: actions/upload-artifact@v2
       with:
@@ -88,7 +93,7 @@ jobs:
       working-directory: assets/pow
 
     - name: Build AArch64
-      run: cross build --target aarch64-apple-darwin
+      run: cargo build --target aarch64-apple-darwin
       working-directory: assets/pow
     - uses: actions/upload-artifact@v2
       with:
@@ -111,11 +116,17 @@ jobs:
         profile: minimal
         default: true
         override: true
-    - name: Install Cross
-      run: cargo install cross
-
+    - name: Install Targets
+      run: |
+        rustup target add x86_64-pc-windows-msvc
+        rustup target add i686-pc-windows-msvc
+        rustup target add aarch64-pc-windows-msvc
+        rustup target add x86_64-pc-windows-gnu
+        rustup target add i686-pc-windows-gnu
+    - name: List Targets
+      run: rustup target list --installed
     - name: Build msvc-x86_64
-      run: cross build --target x86_64-pc-windows-msvc
+      run: cargo build --target x86_64-pc-windows-msvc
       working-directory: assets/pow
     - uses: actions/upload-artifact@v2
       with:
@@ -126,7 +137,7 @@ jobs:
       working-directory: assets/pow
 
     - name: Build msvc-i686
-      run: cross build --target i686-pc-windows-msvc
+      run: cargo build --target i686-pc-windows-msvc
       working-directory: assets/pow
     - uses: actions/upload-artifact@v2
       with:
@@ -137,7 +148,7 @@ jobs:
       working-directory: assets/pow
 
     - name: Build msvc-AArch64
-      run: cross build --target aarch64-pc-windows-msvc
+      run: cargo build --target aarch64-pc-windows-msvc
       working-directory: assets/pow
     - uses: actions/upload-artifact@v2
       with:
@@ -148,7 +159,7 @@ jobs:
       working-directory: assets/pow
 
     - name: Build gnu-x86_64
-      run: cross build --target x86_64-pc-windows-gnu
+      run: cargo build --target x86_64-pc-windows-gnu
       working-directory: assets/pow
     - uses: actions/upload-artifact@v2
       with:
@@ -159,7 +170,7 @@ jobs:
       working-directory: assets/pow
 
     - name: Build gnu-i686
-      run: cross build --target i686-pc-windows-gnu
+      run: cargo build --target i686-pc-windows-gnu
       working-directory: assets/pow
     - uses: actions/upload-artifact@v2
       with:
