@@ -31,7 +31,7 @@ jobs:
         
         - name: Get Tag
           run: |
-              echo "::set-env name=PUBLISH_TAG::${GITHUB_REF#refs/tags/}"
+              echo "PUBLISH_TAG=${GITHUB_REF#refs/*/}" >> $GITHUB_ENV
               echo "Publishing tag ${{ env.PUBLISH_TAG }}"
 
         # Display Tool Versions:
