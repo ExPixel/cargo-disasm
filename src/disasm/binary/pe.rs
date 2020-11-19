@@ -200,7 +200,6 @@ pub fn find_pdb_path(pe: &PE, executable_path: &Path) -> anyhow::Result<Option<P
                 }))
         }
     } else {
-        log::debug!("here");
         // This closure if here just to simplify handling the 2 None cases.
         let get_path = || -> Option<PathBuf> {
             let mut buf = PathBuf::from(executable_path.parent()?);
