@@ -3,7 +3,7 @@ use std::path::PathBuf;
 use termcolor::ColorChoice;
 
 #[derive(Clap)]
-#[clap(name = "cargo-disasm", version = "0.0.1", author = "Marc C.")]
+#[clap(name = "cargo-disasm", version = env!("CARGO_PKG_VERSION"), author = "Marc C.")]
 pub struct Opts {
     /// The name of the symbol to match and disassemble.
     pub symbol: String,
