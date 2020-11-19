@@ -69,7 +69,7 @@ jobs:
         submodules: recursive
     - uses: actions-rs/toolchain@v1
       with:
-        toolchain: beta
+        toolchain: nightly
         profile: minimal
         default: true
         override: true
