@@ -3,8 +3,18 @@ name: Test
 on:
   push:
     branches: [ main ]
+    paths-ignore:
+      - '.github/**'
+      - '.gitignore'
+      - 'LICENSE.txt'
+      - 'README.md'
   pull_request:
     branches: [ main ]
+    paths-ignore:
+      - '.github/**'
+      - '.gitignore'
+      - 'LICENSE.txt'
+      - 'README.md'
 
 env:
   CARGO_TERM_COLOR: always
