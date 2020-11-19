@@ -46,7 +46,7 @@ cargo disasm --release --symsrc=all foo::bar::baz
 **Windows**  
 - [x] PE/COFF file disassembly and symbol discovery
 - [x] use PDB for symbol discovery *(MSVC toolchain)*
-- [ ] use DWARF for symbol discovery *(GNU)*
+- [x] use DWARF for symbol discovery *(GNU)*
 
 **MacOS**  
 - [x] Mach file disassembly and symbol discovery

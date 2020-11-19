@@ -5,7 +5,7 @@ mod pe;
 use super::dwarf::DwarfInfo;
 use super::pdb::PDBInfo;
 use super::strmatch::{distance, Tokenizer};
-use super::symbol::{Symbol, SymbolLang, SymbolSource, SymbolType};
+use super::symbol::{Symbol, SymbolSource};
 use crate::util;
 use anyhow::Context as _;
 
@@ -385,15 +385,6 @@ impl Binary {
         );
 
         Ok(())
-    }
-
-    fn load_pe_pdb(&mut self, _pe: &PE) -> anyhow::Result<Option<Box<PDBInfo>>> {
-        // let path = if let Some(path) = self.get_pe_pdb_path(pe)? {
-        //     path
-        // } else {
-        //     return Ok(None);
-        // };
-        Ok(None)
     }
 
     fn parse_archive_object(&mut self, _archive: &Archive) -> anyhow::Result<()> {
