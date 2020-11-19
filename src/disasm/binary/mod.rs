@@ -338,7 +338,27 @@ impl Binary {
         }
 
         if pe::contains_dwarf(pe) {
-            self.dwarf = Some(pe::load_dwarf(pe, self.endian, &self.data)?);
+            let dwarf = pe::load_dwarf(pe, self.endian, &self.data)?;
+            log::info!("retrieving symbols from DWARF debug information");
+            let symbols_count_before = self.symbols.len();
+            let load_symbols_timer = std::time::Instant::now();
+
+            // If we're using `auto` for the symbol source and no symbols are found.
+            load_dwarf_symbols |=
+                options.sources.is_empty() && self.symbols.len() < AUTO_SOURCES_THRESHOLD;
+
+            if load_dwarf_symbols {
+                log::info!("retrieving symbols from DWARF debug information");
+                pe::load_dwarf_symbols(&dwarf, pe, &mut self.symbols)
+                    .context("error while gather DWARF symbols")?;
+            }
+
+            log::trace!(
+                "found {} symbols in DWARF debug information in {}",
+                self.symbols.len() - symbols_count_before,
+                util::DurationDisplay(load_symbols_timer.elapsed())
+            );
+            self.dwarf = Some(dwarf);
         }
 
         // If we're using `auto` for the symbol source and no symbols are found.

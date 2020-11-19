@@ -2,7 +2,7 @@ use super::{Arch, Binary, BinaryData, Bits, Endian, DWARF_SECTIONS};
 use crate::disasm::dwarf::DwarfInfo;
 use crate::disasm::pdb::PDBInfo;
 use crate::disasm::symbol::{Symbol, SymbolLang, SymbolSource, SymbolType};
-
+use crate::util;
 use anyhow::Context as _;
 use goblin::pe::PE;
 use std::path::{Path, PathBuf};
@@ -136,6 +136,40 @@ pub fn load_dwarf(pe: &PE, endian: Endian, data: &BinaryData) -> anyhow::Result<
     let sup_loader =
         |_section: gimli::SectionId| Ok(gimli::EndianReader::new(data.slice(0..0), endian));
     Ok(Box::new(DwarfInfo::new(loader, sup_loader)?))
+}
+
+pub fn load_dwarf_symbols(
+    dwarf: &DwarfInfo,
+    pe: &PE,
+    symbols: &mut Vec<Symbol>,
+) -> anyhow::Result<()> {
+    let mut sections: Vec<(std::ops::Range<u64>, usize)> = pe
+        .sections
+        .iter()
+        .map(|header| {
+            let vstart = pe.image_base as u64 + header.virtual_address as u64;
+            let vend = vstart + header.virtual_size as u64;
+            (vstart..vend, header.pointer_to_raw_data as usize)
+        })
+        .collect();
+
+    sections.sort_unstable_by(|(lhs, _), (rhs, _)| {
+        lhs.start.cmp(&rhs.start).then(lhs.end.cmp(&rhs.end))
+    });
+
+    let addr_to_offset = |addr| {
+        sections
+            .binary_search_by(|(probe, _)| util::cmp_range_to_idx(probe, addr))
+            .ok()
+            .map(|idx| {
+                let &(ref range, off) = &sections[idx];
+                (addr - range.start) as usize + off
+            })
+    };
+
+    dwarf.load_symbols(symbols, addr_to_offset)?;
+
+    Ok(())
 }
 
 pub fn find_pdb_path(pe: &PE, executable_path: &Path) -> anyhow::Result<Option<PathBuf>> {
