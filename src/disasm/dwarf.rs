@@ -47,10 +47,13 @@ impl DwarfInfo {
         let mut unit_headers = self.dwarf.units();
         let mut name_chain = NameChain::new();
 
-        while let Some(unit_header) = unit_headers
-            .next()
-            .context("failed to read DWARF compilation unit")?
-        {
+        while let Some(unit_header) = match unit_headers.next() {
+            Ok(maybe_unit_header) => maybe_unit_header,
+            Err(err) => {
+                log::debug!("soft error while reading DWARF compilation units: {}", err);
+                None
+            }
+        } {
             let unit = if let Ok(unit) = self.dwarf.unit(unit_header) {
                 unit
             } else {
@@ -61,6 +64,7 @@ impl DwarfInfo {
             self.load_symbols_from_unit(&unit, symbols, &mut addr_to_offset, &mut name_chain)
                 .context("failed to load symbols from compilation unit")?;
         }
+
         Ok(())
     }
 
@@ -241,7 +245,14 @@ impl DwarfInfo {
     ) -> Result<(), gimli::Error> {
         let compilation_unit_search_timer = std::time::Instant::now();
         let mut unit_headers = dwarf.units();
-        while let Some(unit_header) = unit_headers.next()? {
+
+        while let Some(unit_header) = match unit_headers.next() {
+            Ok(maybe_unit_header) => maybe_unit_header,
+            Err(err) => {
+                log::debug!("soft error while reading DWARF compilation units: {}", err);
+                None
+            }
+        } {
             let unit = if let Ok(unit) = dwarf.unit(unit_header) {
                 unit
             } else {
