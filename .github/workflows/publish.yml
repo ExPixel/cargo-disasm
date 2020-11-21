@@ -32,11 +32,11 @@ jobs:
         - name: Get Tag
           run: |
               echo "PUBLISH_TAG=${GITHUB_REF#refs/*/}" >> $GITHUB_ENV
-              echo "Publishing tag ${{ env.PUBLISH_TAG }}"
 
         # Display Tool Versions:
         - name: Check Tools
           run: |
+            echo "Publishing tag ${{ env.PUBLISH_TAG }}"
             rustc --version
             cargo --version
 
