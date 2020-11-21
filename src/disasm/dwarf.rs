@@ -116,7 +116,7 @@ impl DwarfInfo {
                 ];
                 let track_name = TAGS.contains(&abbrev.tag());
 
-                // skip the attributes for this DIE, we don't care about it.
+                // skip the attributes for this DIE.
                 for spec in abbrev.attributes() {
                     let attr = entries.read_attribute(*spec)?;
 
