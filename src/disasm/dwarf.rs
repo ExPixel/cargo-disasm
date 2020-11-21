@@ -39,14 +39,14 @@ impl DwarfInfo {
     pub fn load_symbols<F>(
         &self,
         symbols: &mut Vec<Symbol>,
-        mut addr_to_offset: F,
+        addr_to_offset: F,
     ) -> anyhow::Result<()>
     where
-        F: FnMut(u64) -> Option<usize>,
+        F: Send + Sync + Fn(u64) -> Option<usize>,
     {
         let mut unit_headers = self.dwarf.units();
-        let mut name_chain = NameChain::new();
 
+        let mut units = Vec::new();
         while let Some(unit_header) = match unit_headers.next() {
             Ok(maybe_unit_header) => maybe_unit_header,
             Err(err) => {
@@ -54,29 +54,57 @@ impl DwarfInfo {
                 None
             }
         } {
-            let unit = if let Ok(unit) = self.dwarf.unit(unit_header) {
-                unit
+            if let Ok(unit) = self.dwarf.unit(unit_header) {
+                units.push(unit);
             } else {
                 continue;
-            };
+            }
+        }
 
-            name_chain.clear();
-            self.load_symbols_from_unit(&unit, symbols, &mut addr_to_offset, &mut name_chain)
-                .context("failed to load symbols from compilation unit")?;
+        use rayon::prelude::*;
+
+        log::debug!(
+            "processing {} DWARF compilation units using rayon",
+            units.len()
+        );
+        let (result_send, result_recv) =
+            std::sync::mpsc::sync_channel::<Result<(), anyhow::Error>>(units.len());
+        let dwarf = &self.dwarf;
+        symbols.par_extend(units.par_iter().flat_map(move |unit| {
+            let mut name_chain = NameChain::new();
+            let mut symbols = Vec::with_capacity(32);
+            result_send
+                .send(
+                    Self::load_symbols_from_unit(
+                        dwarf,
+                        &unit,
+                        &mut symbols,
+                        &addr_to_offset,
+                        &mut name_chain,
+                    )
+                    .context("failed to load symbols from compilation unit"),
+                )
+                .expect("receiver should be available");
+            symbols
+        }));
+
+        // Handle any errors that we encountered while gathering symbols
+        for result in result_recv {
+            result?;
         }
 
         Ok(())
     }
 
     fn load_symbols_from_unit<F>(
-        &self,
+        dwarf: &Dwarf<BinaryDataReader>,
         unit: &gimli::Unit<BinaryDataReader>,
         symbols: &mut Vec<Symbol>,
-        addr_to_offset: &mut F,
+        addr_to_offset: &F,
         name_chain: &mut NameChain,
     ) -> Result<(), gimli::Error>
     where
-        F: FnMut(u64) -> Option<usize>,
+        F: Fn(u64) -> Option<usize>,
     {
         let mut entries = unit.entries_raw(None)?;
 
@@ -96,7 +124,7 @@ impl DwarfInfo {
                     abbrev.attributes(),
                     &mut entries,
                     unit,
-                    &self.dwarf,
+                    &dwarf,
                     addr_to_offset,
                     name_chain,
                 )? {
@@ -122,7 +150,7 @@ impl DwarfInfo {
 
                     // If the name should be tracked, push it onto the name chain.
                     if track_name && attr.name() == gimli::DW_AT_name {
-                        name_chain.push(self.dwarf.attr_string(unit, attr.value())?);
+                        name_chain.push(dwarf.attr_string(unit, attr.value())?);
                     }
                 }
             }
@@ -136,11 +164,11 @@ impl DwarfInfo {
         entries: &mut gimli::read::EntriesRaw<BinaryDataReader>,
         unit: &gimli::Unit<BinaryDataReader>,
         dwarf: &Dwarf<BinaryDataReader>,
-        addr_to_offset: &mut F,
+        addr_to_offset: &F,
         name_chain: &mut NameChain,
     ) -> Result<Option<Symbol>, gimli::Error>
     where
-        F: FnMut(u64) -> Option<usize>,
+        F: Fn(u64) -> Option<usize>,
     {
         let mut start = None;
         let mut end: Option<u64> = None;
@@ -338,15 +366,6 @@ impl DwarfInfo {
         units.push(LazyCompilationUnit::new(unit, lang));
         Ok(())
     }
-}
-
-struct TreeVisitorContext<'r, F>
-where
-    F: FnMut(u64) -> Option<usize>,
-{
-    unit: &'r gimli::read::Unit<BinaryDataReader>,
-    symbols: &'r mut Vec<Symbol>,
-    addr_to_offset: &'r mut F,
 }
 
 pub struct LazyCompilationUnit {

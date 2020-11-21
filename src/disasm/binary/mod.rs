@@ -16,7 +16,7 @@ use std::fmt;
 use std::fs::File;
 use std::io::{self, Read, Seek, SeekFrom};
 use std::path::{Path, PathBuf};
-use std::rc::Rc;
+use std::sync::Arc;
 
 /// Threshold for using all available sources when symbol sources is 'auto'.
 /// While there are less than `AUTO_SOURCES_THRESHOLD` symbols loaded
@@ -413,7 +413,7 @@ pub struct BinaryData {
     /// The current offset of the binary data that is being read.
     offset: usize,
 
-    inner: Rc<BinaryDataInner>,
+    inner: Arc<BinaryDataInner>,
 }
 
 impl BinaryData {
@@ -432,7 +432,7 @@ impl BinaryData {
                 .map(|mmap| BinaryData {
                     range: 0..mmap.len(),
                     offset: 0,
-                    inner: Rc::new(BinaryDataInner { mmap, file, path }),
+                    inner: Arc::new(BinaryDataInner { mmap, file, path }),
                 })
                 .map_err(|err| err.into())
         }
