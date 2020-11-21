@@ -18,8 +18,11 @@ pub fn print_disassembly(
     let max_mnem = measure.max_mnemonic_len(); // mnemonic length
     let mut max_oprn = measure.max_operands_len(); // operand length
     let max_comm = measure.max_comments_len(); // comment length
+    let max_bytes = measure.max_bytes_width_hex(1); // bytes length
 
-    let oprn_indent = Spacing(space_sm.0 + max_addr + space_lg.0 + max_mnem + space_sm.0);
+    let oprn_indent = Spacing(
+        space_sm.0 + max_addr + space_sm.0 + max_bytes + space_lg.0 + max_mnem + space_sm.0,
+    );
 
     if max_oprn > MAX_OPERAND_LEN {
         max_oprn = MAX_OPERAND_LEN;
@@ -30,6 +33,9 @@ pub fn print_disassembly(
     let mut clr_addr = ColorSpec::new(); // address color
     clr_addr.set_fg(Some(Color::Blue));
 
+    let mut clr_bytes = ColorSpec::new();
+    clr_bytes.set_fg(Some(Color::Yellow));
+
     let mut clr_mnem = ColorSpec::new(); // mnemonic color
     clr_mnem.set_fg(Some(Color::Green));
     clr_mnem.set_bold(true);
@@ -39,6 +45,7 @@ pub fn print_disassembly(
     clr_oprn_sym.set_fg(Some(Color::Cyan));
 
     let mut clr_comm = ColorSpec::new(); // comment color
+    clr_comm.set_italic(true);
     clr_comm.set_fg(Some(Color::Yellow));
 
     out.set_color(ColorSpec::new().set_fg(Some(Color::Cyan)).set_bold(true))?;
@@ -54,6 +61,12 @@ pub fn print_disassembly(
 
         out.set_color(&clr_norm)?;
         write!(out, "{}", space_lg)?;
+
+        out.set_color(&clr_bytes)?;
+        write!(out, "{:>1$}", Hex(line.bytes()), max_bytes)?;
+
+        out.set_color(&clr_norm)?;
+        write!(out, "{}", space_sm)?;
 
         out.set_color(&clr_mnem)?;
         write!(out, "{:<1$}", line.mnemonic(), max_mnem)?;
@@ -129,6 +142,44 @@ pub fn print_disassembly(
     }
 
     Ok(())
+}
+
+pub struct Hex<'b>(&'b [u8]);
+
+impl std::fmt::Display for Hex<'_> {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        const LOWER: [u8; 16] = [
+            b'0', b'1', b'2', b'3', b'4', b'5', b'6', b'7', b'8', b'9', b'a', b'b', b'c', b'd',
+            b'e', b'f',
+        ];
+        const UPPER: [u8; 16] = [
+            b'0', b'1', b'2', b'3', b'4', b'5', b'6', b'7', b'8', b'9', b'A', b'B', b'C', b'D',
+            b'E', b'F',
+        ];
+
+        let output_width = if self.0.is_empty() {
+            0
+        } else {
+            (self.0.len() as usize * 2) + (self.0.len() as usize - 1)
+        };
+        let mut buffer = String::with_capacity(output_width);
+
+        for &byte in self.0 {
+            if !buffer.is_empty() {
+                buffer.push(' ');
+            }
+
+            if f.alternate() {
+                buffer.push(UPPER[(byte >> 4) as usize] as char);
+                buffer.push(UPPER[(byte & 15) as usize] as char);
+            } else {
+                buffer.push(LOWER[(byte >> 4) as usize] as char);
+                buffer.push(LOWER[(byte & 15) as usize] as char);
+            }
+        }
+
+        f.pad(&buffer)
+    }
 }
 
 pub struct Spacing(usize);
