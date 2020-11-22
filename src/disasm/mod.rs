@@ -1,5 +1,6 @@
 pub mod binary;
 pub mod display;
+pub mod source;
 pub mod symbol;
 
 mod anal;
@@ -12,11 +13,23 @@ use self::binary::Binary;
 use self::symbol::Symbol;
 use anyhow::Context as _;
 use capstone::Capstone;
+use source::SourceLoader;
 
-pub fn disasm(binary: &Binary, symbol: &Symbol) -> anyhow::Result<Disassembly> {
+pub fn disasm(binary: &Binary, symbol: &Symbol, load_source: bool) -> anyhow::Result<Disassembly> {
+    let disasm_timer = std::time::Instant::now();
     let caps = capstone_for_binary(binary)?;
     let mut disassembly = Disassembly::new();
-    disasm_symbol_lines(&caps, binary, symbol, &mut disassembly)?;
+    let source_loader = if load_source {
+        Some(SourceLoader::new())
+    } else {
+        None
+    };
+    disasm_symbol_lines(&caps, binary, symbol, source_loader, &mut disassembly)?;
+    log::trace!(
+        "disassembled symbol {} in {}",
+        symbol.name(),
+        crate::util::DurationDisplay(disasm_timer.elapsed())
+    );
     Ok(disassembly)
 }
 
@@ -24,6 +37,7 @@ fn disasm_symbol_lines(
     caps: &Capstone,
     binary: &Binary,
     symbol: &Symbol,
+    mut source_loader: Option<SourceLoader>,
     disassembly: &mut Disassembly,
 ) -> anyhow::Result<()> {
     for insn in caps.disasm_iter(
@@ -32,13 +46,29 @@ fn disasm_symbol_lines(
     ) {
         let insn = insn.context("failed to disassemble instruction")?;
         let jump = anal::identify_jump_target(insn, caps);
+
+        let mut source_lines = Vec::new();
+        if let Some(ref mut source_loader) = source_loader {
+            source_loader
+                .load_lines(
+                    binary.addr2line(insn.address())?.iter_mut().flatten(),
+                    &mut source_lines,
+                )
+                .context("error while loading sources for line")?;
+        }
+        let source_lines = if source_lines.is_empty() {
+            None
+        } else {
+            Some(source_lines.into_boxed_slice())
+        };
+
         let line = DisasmLine {
             address: insn.address(),
             mnemonic: insn.mnemonic().into(),
             operands: insn.operands().into(),
             comments: None,
             bytes: insn.bytes().to_vec().into_boxed_slice(),
-            source_lines: None,
+            source_lines,
             jump,
             is_symbolicated_jump: false,
         };

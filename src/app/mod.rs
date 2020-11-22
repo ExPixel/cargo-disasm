@@ -107,19 +107,25 @@ pub fn run() -> anyhow::Result<()> {
     sources.sort_unstable();
     sources.dedup();
 
+    let show_source = true;
+
     let search_options = SearchOptions {
         sources: &sources,
         dwarf_path: None,
         dsym_path: None,
         pdb_path: None,
     };
-    let bin = Binary::new(data, search_options)?;
+    let mut bin = Binary::new(data, search_options)?;
+
+    if show_source {
+        bin.load_line_information()?;
+    }
 
     // FIXME temporary test code
     if let Some(symbol) = bin.fuzzy_find_symbol(&opts.symbol) {
-        let disassembly = disasm::disasm(&bin, symbol)?;
+        let disassembly = disasm::disasm(&bin, symbol, show_source)?;
         let mut stdout = StandardStream::stdout(color_choice);
-        printer::print_disassembly(&mut stdout, symbol, &disassembly)
+        printer::print_disassembly(&mut stdout, symbol, &disassembly, &bin)
             .context("error occured while printing disassembly")?;
     } else {
         return Err(anyhow::anyhow!(

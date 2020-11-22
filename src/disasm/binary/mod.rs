@@ -391,6 +391,25 @@ impl Binary {
             "archive objects are not currently supported"
         ))
     }
+
+    pub fn load_line_information(&mut self) -> anyhow::Result<()> {
+        if let Some(ref mut dwarf) = self.dwarf {
+            dwarf.ensure_compilation_units()?;
+        }
+
+        Ok(())
+    }
+
+    pub fn addr2line(
+        &self,
+        addr: u64,
+    ) -> anyhow::Result<Option<impl '_ + Iterator<Item = (&Path, u32)>>> {
+        if let Some(ref dwarf) = self.dwarf {
+            return dwarf.addr2line(addr);
+        }
+
+        Ok(None)
+    }
 }
 
 struct BinaryDataInner {

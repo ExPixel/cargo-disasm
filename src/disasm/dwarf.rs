@@ -257,12 +257,23 @@ impl DwarfInfo {
         }
         self.compilation_units_initialized = true;
 
+        log::debug!("loading DWARF line information");
+        let load_line_info_timer = std::time::Instant::now();
+
         Self::find_compilation_units(
             &self.dwarf,
             &mut self.compilation_units,
             &mut self.compilation_unit_ranges,
         )
-        .context("error while finding compilation units")
+        .context("error while finding compilation units")?;
+
+        log::trace!(
+            "loaded {} DWARF compilation unit ranges in {}",
+            self.compilation_unit_ranges.len(),
+            util::DurationDisplay(load_line_info_timer.elapsed())
+        );
+
+        Ok(())
     }
 
     #[cold]
@@ -365,6 +376,24 @@ impl DwarfInfo {
 
         units.push(LazyCompilationUnit::new(unit, lang));
         Ok(())
+    }
+
+    pub fn addr2line(
+        &self,
+        addr: u64,
+    ) -> anyhow::Result<Option<impl '_ + Iterator<Item = (&Path, u32)>>> {
+        let range_idx = if let Ok(idx) = self
+            .compilation_unit_ranges
+            .binary_search_by(|&(ref probe, _)| util::cmp_range_to_idx(probe, addr))
+        {
+            idx
+        } else {
+            return Ok(None);
+        };
+        let unit_idx = self.compilation_unit_ranges[range_idx].1 as usize;
+        let unit = &self.compilation_units[unit_idx];
+        let lines = unit.lines(&self.dwarf)?;
+        Ok(lines.lines_for_addr(addr))
     }
 }
 
@@ -506,19 +535,35 @@ impl Lines {
         }
     }
 
-    fn lines_for_addr(&self, addr: u64) -> Option<(&Path, u32)> {
+    fn lines_for_addr(&self, addr: u64) -> Option<impl '_ + Iterator<Item = (&Path, u32)>> {
+        let map_line = move |line: &Line| (self.files[line.file].as_path(), line.line);
+
         let sequence = self
             .sequences
             .binary_search_by(|probe| util::cmp_range_to_idx(&probe.range, addr))
             .ok()
             .and_then(|seq_idx| self.sequences.get(seq_idx))?;
 
-        sequence
+        if let Ok(idx) = sequence
             .lines
             .binary_search_by(|probe| probe.addr.cmp(&addr))
-            .ok()
-            .and_then(|line_idx| sequence.lines.get(line_idx))
-            .map(|line| (self.files[line.file].as_path(), line.line))
+        {
+            let mut range = idx..(idx + 1);
+
+            // Find the first line with the address
+            while range.start > 0 && sequence.lines[range.start - 1].addr == addr {
+                range.start -= 1;
+            }
+
+            // Find the final line with the address.
+            while range.end < sequence.lines.len() && sequence.lines[range.end].addr == addr {
+                range.end += 1;
+            }
+
+            Some((&sequence.lines[range] as &[Line]).iter().map(map_line))
+        } else {
+            None
+        }
     }
 }
 

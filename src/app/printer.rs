@@ -1,5 +1,5 @@
 use crate::disasm::strmatch::Tokenizer;
-use crate::disasm::{self, symbol::Symbol, Disassembly};
+use crate::disasm::{self, binary::Binary, symbol::Symbol, Disassembly};
 use termcolor::{Color, ColorSpec, WriteColor};
 
 const MAX_OPERAND_LEN: usize = 72;
@@ -8,6 +8,7 @@ pub fn print_disassembly(
     out: &mut dyn WriteColor,
     sym: &Symbol,
     dis: &Disassembly,
+    bin: &Binary,
 ) -> anyhow::Result<()> {
     let measure = disasm::display::measure(dis);
 
@@ -23,6 +24,7 @@ pub fn print_disassembly(
     let oprn_indent = Spacing(
         space_sm.0 + max_addr + space_sm.0 + max_bytes + space_lg.0 + max_mnem + space_sm.0,
     );
+    let source_indent = Spacing(space_sm.0 + max_addr + space_sm.0);
 
     if max_oprn > MAX_OPERAND_LEN {
         max_oprn = MAX_OPERAND_LEN;
@@ -35,6 +37,10 @@ pub fn print_disassembly(
 
     let mut clr_bytes = ColorSpec::new();
     clr_bytes.set_fg(Some(Color::Yellow));
+
+    let mut clr_source = ColorSpec::new(); // mnemonic color
+    clr_source.set_fg(Some(Color::Magenta));
+    clr_source.set_bold(true);
 
     let mut clr_mnem = ColorSpec::new(); // mnemonic color
     clr_mnem.set_fg(Some(Color::Green));
@@ -53,6 +59,11 @@ pub fn print_disassembly(
     out.set_color(&clr_norm)?;
 
     for line in dis.lines() {
+        for source_line in line.source_lines() {
+            out.set_color(&clr_source)?;
+            writeln!(out, "{}{}", source_indent, source_line)?;
+        }
+
         out.set_color(&clr_norm)?;
         write!(out, "{}", space_sm)?;
 
