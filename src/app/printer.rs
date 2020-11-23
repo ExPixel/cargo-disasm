@@ -9,6 +9,7 @@ pub fn print_disassembly(
     sym: &Symbol,
     dis: &Disassembly,
     bin: &Binary,
+    opt: DisasmOptions,
 ) -> anyhow::Result<()> {
     let measure = disasm::display::measure(dis);
 
@@ -21,10 +22,16 @@ pub fn print_disassembly(
     let max_comm = measure.max_comments_len(); // comment length
     let max_bytes = measure.max_bytes_width_hex(1); // bytes length
 
-    let oprn_indent = Spacing(
-        space_sm.0 + max_addr + space_sm.0 + max_bytes + space_lg.0 + max_mnem + space_sm.0,
-    );
-    let source_indent = Spacing(space_sm.0 + max_addr + space_sm.0);
+    let addr_indent = space_sm.0;
+    let bytes_indent = addr_indent + max_addr + space_lg.0;
+    let mnem_indent = bytes_indent
+        + if opt.show_bytes {
+            max_bytes + space_sm.0
+        } else {
+            0
+        };
+    let oprn_indent = mnem_indent + max_mnem + space_sm.0;
+    let source_indent = bytes_indent;
 
     if max_oprn > MAX_OPERAND_LEN {
         max_oprn = MAX_OPERAND_LEN;
@@ -59,9 +66,11 @@ pub fn print_disassembly(
     out.set_color(&clr_norm)?;
 
     for line in dis.lines() {
-        for source_line in line.source_lines() {
-            out.set_color(&clr_source)?;
-            writeln!(out, "{}{}", source_indent, source_line)?;
+        if opt.show_source {
+            for source_line in line.source_lines() {
+                out.set_color(&clr_source)?;
+                writeln!(out, "{}{}", Spacing(source_indent), source_line)?;
+            }
         }
 
         out.set_color(&clr_norm)?;
@@ -73,11 +82,13 @@ pub fn print_disassembly(
         out.set_color(&clr_norm)?;
         write!(out, "{}", space_lg)?;
 
-        out.set_color(&clr_bytes)?;
-        write!(out, "{:>1$}", Hex(line.bytes()), max_bytes)?;
+        if opt.show_bytes {
+            out.set_color(&clr_bytes)?;
+            write!(out, "{:>1$}", Hex(line.bytes()), max_bytes)?;
 
-        out.set_color(&clr_norm)?;
-        write!(out, "{}", space_sm)?;
+            out.set_color(&clr_norm)?;
+            write!(out, "{}", space_sm)?;
+        }
 
         out.set_color(&clr_mnem)?;
         write!(out, "{:<1$}", line.mnemonic(), max_mnem)?;
@@ -263,4 +274,10 @@ impl<'s> Iterator for WordWrapped<'s> {
 pub enum WrappedStr<'s> {
     Str(&'s str),
     Break,
+}
+
+#[derive(Copy, Clone)]
+pub struct DisasmOptions {
+    pub show_bytes: bool,
+    pub show_source: bool,
 }

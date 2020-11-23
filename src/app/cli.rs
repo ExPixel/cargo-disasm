@@ -57,6 +57,14 @@ pub struct Opts {
     /// Coloring: auto, always, never, and always-ansi (only uses ansi color codes).
     #[clap(long = "color", default_value = "auto", parse(try_from_str = parse_colorchoice))]
     pub color_choice: ColorChoice,
+
+    /// If it is available, show source code alongside disassembly.
+    #[clap(short = 'S', long = "show-source")]
+    pub show_source: bool,
+
+    /// Show the bytes for each opcode alongside disassembly.
+    #[clap(short = 'B', long = "show-bytes")]
+    pub show_bytes: bool,
 }
 
 impl Opts {
