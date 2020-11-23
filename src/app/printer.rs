@@ -22,15 +22,15 @@ pub fn print_disassembly(
     let max_comm = measure.max_comments_len(); // comment length
     let max_bytes = measure.max_bytes_width_hex(1); // bytes length
 
-    let addr_indent = space_sm.0;
-    let bytes_indent = addr_indent + max_addr + space_lg.0;
+    let addr_indent = space_sm;
+    let bytes_indent = addr_indent + max_addr + space_lg;
     let mnem_indent = bytes_indent
         + if opt.show_bytes {
-            max_bytes + space_sm.0
+            space_sm + max_bytes // spacing comes after
         } else {
-            0
+            Spacing(0)
         };
-    let oprn_indent = mnem_indent + max_mnem + space_sm.0;
+    let oprn_indent = mnem_indent + max_mnem + space_sm;
     let source_indent = bytes_indent;
 
     if max_oprn > MAX_OPERAND_LEN {
@@ -69,7 +69,7 @@ pub fn print_disassembly(
         if opt.show_source {
             for source_line in line.source_lines() {
                 out.set_color(&clr_source)?;
-                writeln!(out, "{}{}", Spacing(source_indent), source_line)?;
+                writeln!(out, "{}{}", source_indent, source_line)?;
             }
         }
 
@@ -204,7 +204,64 @@ impl std::fmt::Display for Hex<'_> {
     }
 }
 
+#[derive(Copy, Clone)]
 pub struct Spacing(usize);
+
+impl std::ops::Add<Self> for Spacing {
+    type Output = Self;
+
+    fn add(self, other: Spacing) -> Self {
+        Spacing(self.0 + other.0)
+    }
+}
+
+impl std::ops::AddAssign<Self> for Spacing {
+    fn add_assign(&mut self, other: Spacing) {
+        *self = *self + other;
+    }
+}
+
+impl std::ops::Sub<Self> for Spacing {
+    type Output = Self;
+
+    fn sub(self, other: Spacing) -> Self {
+        Spacing(self.0 - other.0)
+    }
+}
+
+impl std::ops::SubAssign<Self> for Spacing {
+    fn sub_assign(&mut self, other: Spacing) {
+        *self = *self - other;
+    }
+}
+
+impl std::ops::Add<usize> for Spacing {
+    type Output = Self;
+
+    fn add(self, other: usize) -> Self {
+        Spacing(self.0 + other)
+    }
+}
+
+impl std::ops::AddAssign<usize> for Spacing {
+    fn add_assign(&mut self, other: usize) {
+        *self = *self + other;
+    }
+}
+
+impl std::ops::Sub<usize> for Spacing {
+    type Output = Self;
+
+    fn sub(self, other: usize) -> Self {
+        Spacing(self.0 - other)
+    }
+}
+
+impl std::ops::SubAssign<usize> for Spacing {
+    fn sub_assign(&mut self, other: usize) {
+        *self = *self - other;
+    }
+}
 
 impl std::fmt::Display for Spacing {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
