@@ -1,7 +1,7 @@
 use super::{Arch, Binary, BinaryData, Bits, Endian, DWARF_SECTIONS};
 use crate::disasm::dwarf::DwarfInfo;
 use crate::disasm::pdb::PDBInfo;
-use crate::disasm::symbol::{Symbol, SymbolLang, SymbolSource, SymbolType};
+use crate::disasm::symbol::{Symbol, SymbolSource};
 use crate::util;
 use anyhow::Context as _;
 use goblin::pe::PE;
@@ -93,9 +93,7 @@ pub fn load_symbols(pe: &PE, data: &BinaryData, symbols: &mut Vec<Symbol>) -> an
             sym_addr,
             sym_offset as usize,
             0, // this is fixed later
-            SymbolType::Function,
             SymbolSource::Pe,
-            SymbolLang::Unknown,
         ));
     }
 

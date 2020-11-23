@@ -1,6 +1,6 @@
 use super::{Arch, Binary, BinaryData, Bits, Endian, DWARF_SECTIONS};
 use crate::disasm::dwarf::DwarfInfo;
-use crate::disasm::symbol::{Symbol, SymbolLang, SymbolSource, SymbolType};
+use crate::disasm::symbol::{Symbol, SymbolSource};
 use crate::util;
 use anyhow::Context as _;
 use goblin::elf::Elf;
@@ -68,9 +68,7 @@ pub fn load_symbols(elf: &Elf, symbols: &mut Vec<Symbol>) -> anyhow::Result<()> 
             sym_addr,
             sym_offset as usize,
             sym.st_size as usize,
-            SymbolType::Function,
             SymbolSource::Elf,
-            SymbolLang::Unknown,
         ));
     }
 

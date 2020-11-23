@@ -1,6 +1,6 @@
 use super::{Arch, Binary, BinaryData, Bits, Endian, DWARF_SECTIONS};
 use crate::disasm::dwarf::DwarfInfo;
-use crate::disasm::symbol::{Symbol, SymbolLang, SymbolSource, SymbolType};
+use crate::disasm::symbol::{Symbol, SymbolSource};
 use crate::util;
 use anyhow::Context as _;
 use goblin::mach::segment::Section;
@@ -67,9 +67,7 @@ pub fn load_symbols(
             sym_addr,
             sym_offset as usize,
             0, // this is fixed later
-            SymbolType::Function,
             SymbolSource::Mach,
-            SymbolLang::Unknown,
         ));
     }
 

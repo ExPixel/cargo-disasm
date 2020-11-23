@@ -1,5 +1,5 @@
 use crate::disasm::binary::BinaryData;
-use crate::disasm::symbol::{Symbol, SymbolLang, SymbolSource, SymbolType};
+use crate::disasm::symbol::{Symbol, SymbolSource};
 use crate::util;
 use anyhow::Context as _;
 use gimli::{read::EndianReader, Dwarf, RunTimeEndian};
@@ -220,10 +220,7 @@ impl DwarfInfo {
                             start,
                             off,
                             len,
-                            SymbolType::Function,
                             SymbolSource::Dwarf,
-                            // FIXME use the unit to figure this out. The information is in there.
-                            SymbolLang::Unknown,
                         )))
                     } else {
                         Ok(None)
@@ -235,10 +232,7 @@ impl DwarfInfo {
                         start,
                         off,
                         len,
-                        SymbolType::Function,
                         SymbolSource::Dwarf,
-                        // FIXME use the unit to figure this out. The information is in there.
-                        SymbolLang::Unknown,
                     )))
                 }
             } else {

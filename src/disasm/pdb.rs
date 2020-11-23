@@ -1,5 +1,5 @@
 use crate::disasm::binary::BinaryData;
-use crate::disasm::symbol::{Symbol, SymbolLang, SymbolSource, SymbolType};
+use crate::disasm::symbol::{Symbol, SymbolSource};
 use ::pdb::{AddressMap, FallibleIterator as _, ImageSectionHeader, ModuleInfo, SymbolData, PDB};
 use anyhow::Context as _;
 
@@ -110,10 +110,7 @@ impl PDBInfo {
                     sym_address,
                     sym_offset,
                     procedure.len as usize,
-                    SymbolType::Function,
                     SymbolSource::Dwarf,
-                    // FIXME figure out the symbol language somehow
-                    SymbolLang::Unknown,
                 ));
             }
         }
