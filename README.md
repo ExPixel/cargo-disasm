@@ -41,7 +41,7 @@ cargo disasm --release --symsrc=all foo::bar::baz
 > be able to figure this out on its own soon.
 
 # TODO
-- [ ] Showing source code alongside disassembly
+- [x] Showing source code alongside disassembly *(DWARF only, PDB not yet supported)*
 
 **Windows**  
 - [x] PE/COFF file disassembly and symbol discovery
@@ -57,7 +57,7 @@ cargo disasm --release --symsrc=all foo::bar::baz
 - [x] use DWARF for symbol discovery
 
 **Line Information**
-- [ ] use DWARF for line information
+- [x] use DWARF for line information
 - [ ] use PDB for line information
 
 **Postponed**
