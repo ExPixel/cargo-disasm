@@ -110,7 +110,7 @@ impl PDBInfo {
                     sym_address,
                     sym_offset,
                     procedure.len as usize,
-                    SymbolSource::Dwarf,
+                    SymbolSource::Pdb,
                 ));
             }
         }
