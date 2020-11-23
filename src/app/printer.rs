@@ -1,5 +1,5 @@
 use crate::disasm::strmatch::Tokenizer;
-use crate::disasm::{self, binary::Binary, symbol::Symbol, Disassembly};
+use crate::disasm::{self, symbol::Symbol, Disassembly};
 use termcolor::{Color, ColorSpec, WriteColor};
 
 const MAX_OPERAND_LEN: usize = 72;
@@ -8,7 +8,6 @@ pub fn print_disassembly(
     out: &mut dyn WriteColor,
     sym: &Symbol,
     dis: &Disassembly,
-    bin: &Binary,
     opt: DisasmOptions,
 ) -> anyhow::Result<()> {
     let measure = disasm::display::measure(dis);

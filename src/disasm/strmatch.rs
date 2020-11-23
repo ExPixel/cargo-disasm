@@ -20,10 +20,6 @@ impl<'a> Tokenizer<'a> {
         }
     }
 
-    fn set_normalize_whitespace(&mut self, n: bool) {
-        self.normalize_whitespace = n;
-    }
-
     fn next_char(&mut self) -> Option<char> {
         self.source.next()
     }

@@ -86,7 +86,7 @@ impl LineCache {
         }
 
         let mut end = *self.offsets.get(index as usize)? as usize;
-        let mut start = if index == 0 {
+        let start = if index == 0 {
             0
         } else {
             self.offsets[index as usize - 1] as usize

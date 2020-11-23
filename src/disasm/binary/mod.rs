@@ -92,24 +92,24 @@ impl Binary {
         self.symbols.get(idx).map(|sym| (sym, addr - sym.address()))
     }
 
-    /// Returns an iterator of symbols matching the given `name` string
-    /// and their calculated "distance" from the desired symbol name.
-    pub fn fuzzy_list_symbols<'s, 'n: 's>(
-        &'s self,
-        name: &'n str,
-    ) -> impl Iterator<Item = (u32, &'s Symbol)> + 's {
-        let tokens = Tokenizer::new(name).collect::<Vec<&str>>();
-        self.symbols.iter().filter_map(move |sym| {
-            Some((
-                distance(
-                    tokens.iter().copied(),
-                    Tokenizer::new(&sym.name()),
-                    u32::MAX,
-                )?,
-                sym,
-            ))
-        })
-    }
+    // /// Returns an iterator of symbols matching the given `name` string
+    // /// and their calculated "distance" from the desired symbol name.
+    // pub fn fuzzy_list_symbols<'s, 'n: 's>(
+    //     &'s self,
+    //     name: &'n str,
+    // ) -> impl Iterator<Item = (u32, &'s Symbol)> + 's {
+    //     let tokens = Tokenizer::new(name).collect::<Vec<&str>>();
+    //     self.symbols.iter().filter_map(move |sym| {
+    //         Some((
+    //             distance(
+    //                 tokens.iter().copied(),
+    //                 Tokenizer::new(&sym.name()),
+    //                 u32::MAX,
+    //             )?,
+    //             sym,
+    //         ))
+    //     })
+    // }
 
     pub fn fuzzy_find_symbol<'s>(&'s self, name: &str) -> Option<&'s Symbol> {
         let tokens = Tokenizer::new(name).collect::<Vec<&str>>();
@@ -160,10 +160,6 @@ impl Binary {
 
     pub fn endian(&self) -> Endian {
         self.endian
-    }
-
-    pub fn bits(&self) -> Bits {
-        self.bits
     }
 
     fn parse_object(&mut self, options: SearchOptions) -> anyhow::Result<()> {
@@ -418,9 +414,6 @@ struct BinaryDataInner {
 
     /// The original path that was used to load this binary data.
     path: PathBuf,
-
-    /// The file that was used to load this binary data.
-    file: File,
 }
 
 /// Reference counted and memory mapped binary data.
@@ -451,7 +444,7 @@ impl BinaryData {
                 .map(|mmap| BinaryData {
                     range: 0..mmap.len(),
                     offset: 0,
-                    inner: Arc::new(BinaryDataInner { mmap, file, path }),
+                    inner: Arc::new(BinaryDataInner { mmap, path }),
                 })
                 .map_err(|err| err.into())
         }

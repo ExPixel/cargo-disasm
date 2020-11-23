@@ -640,6 +640,7 @@ impl NameChain {
         ret
     }
 
+    #[allow(dead_code)]
     fn clear(&mut self) {
         self.names.clear();
         self.length = 0;

@@ -127,7 +127,6 @@ pub fn run() -> anyhow::Result<()> {
             &mut stdout,
             symbol,
             &disassembly,
-            &bin,
             printer::DisasmOptions {
                 show_source: opts.show_source,
                 show_bytes: opts.show_bytes,
