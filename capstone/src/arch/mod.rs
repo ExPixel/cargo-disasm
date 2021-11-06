@@ -86,20 +86,6 @@ impl Reg {
 
 macro_rules! impl_arch {
     ($ArchModuleName:ident, $ArchTypeName:ident, $ArchFnName:ident) => {
-        impl From<$ArchModuleName::InsnId> for InsnId {
-            #[inline]
-            fn from(id: $ArchModuleName::InsnId) -> InsnId {
-                InsnId::$ArchTypeName(id)
-            }
-        }
-
-        impl PartialEq<$ArchModuleName::InsnId> for InsnId {
-            #[inline]
-            fn eq(&self, other: &$ArchModuleName::InsnId) -> bool {
-                matches!(self, InsnId::$ArchTypeName(inner) if inner == other)
-            }
-        }
-
         impl PartialEq<$ArchModuleName::InsnGroup> for InsnGroup {
             #[inline]
             fn eq(&self, other: &$ArchModuleName::InsnGroup) -> bool {
@@ -178,4 +164,5 @@ macro_rules! impl_arch {
     };
 }
 
+impl_arch!(arm64, Arm64, arm64);
 impl_arch!(x86, X86, x86);
