@@ -43,7 +43,7 @@ jobs:
         # Publish
         - name: Publish Capstone Crate
           if: ${{ startsWith(env.PUBLISH_TAG, 'ep-capstone-v') }}
-          working-directory: ep-capstone
+          working-directory: capstone
           run: |
               cargo login ${{ secrets.CARGO_LOGIN_TOKEN  }}
               cargo publish
