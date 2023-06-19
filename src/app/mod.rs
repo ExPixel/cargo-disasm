@@ -8,7 +8,7 @@ use crate::disasm::{
     symbol::SymbolSource,
 };
 use anyhow::Context as _;
-use clap::Clap as _;
+use clap::Parser as _;
 use cli::Opts;
 use logging::AppLogger;
 use std::path::PathBuf;

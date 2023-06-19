@@ -108,7 +108,7 @@ pub fn print_disassembly(
         let mut operands = WordWrapped::new(line.operands(), max_oprn);
         let mut has_more_operands = false;
         let mut operand_chars_printed = 0;
-        while let Some(operand) = operands.next() {
+        for operand in operands.by_ref() {
             if let WrappedStr::Str(token) = operand {
                 operand_chars_printed += token.len();
                 write!(out, "{}", token)?;
@@ -181,7 +181,7 @@ impl std::fmt::Display for Hex<'_> {
         let output_width = if self.0.is_empty() {
             0
         } else {
-            (self.0.len() as usize * 2) + (self.0.len() as usize - 1)
+            (self.0.len() * 2) + (self.0.len() - 1)
         };
         let mut buffer = String::with_capacity(output_width);
 

@@ -1,8 +1,8 @@
-use clap::Clap;
+use clap::Parser;
 use std::path::PathBuf;
 use termcolor::ColorChoice;
 
-#[derive(Clap)]
+#[derive(Parser)]
 #[clap(name = "cargo-disasm", version = env!("CARGO_PKG_VERSION"), author = "Marc C.")]
 pub struct Opts {
     /// The name of the symbol to match and disassemble.
