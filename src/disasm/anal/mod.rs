@@ -1,9 +1,11 @@
+mod arm64;
 mod x86;
 
 use capstone::{Arch, Capstone, Insn};
 
 pub fn identify_jump_target(insn: &Insn, caps: &Capstone) -> Jump {
     match caps.arch() {
+        Arch::Arm64 => arm64::identify_jump_target(insn, caps),
         Arch::X86 => x86::identify_jump_target(insn, caps),
         _ => Jump::None,
     }

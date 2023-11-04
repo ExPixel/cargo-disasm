@@ -258,6 +258,17 @@ impl<'i> Details<'i> {
         }
     }
 
+    /// If these are details for an arm64 instruction, this will return
+    /// arm64 specific details. If these are not details for an arm64 instruction
+    /// this will return [`Option::None`].
+    pub fn arm64(self) -> Option<&'i arm64::Details<'i>> {
+        if self.arch == Arch::Arm64 {
+            Some(unsafe { &self.inner.arch.arm64 })
+        } else {
+            None
+        }
+    }
+
     /// If these are details for an x86 instruction, this will return
     /// x86 specific details. If these are not details for an x86 instruction
     /// this will return [`Option::None`].
